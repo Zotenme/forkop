@@ -8,7 +8,7 @@ if grep -Fiq 'sourceforge' "$workflow"; then
   exit 1
 fi
 
-grep -Fq 'uses: softprops/action-gh-release@v2.4.0' "$workflow"
+grep -Fq 'uses: softprops/action-gh-release@v3.0.3' "$workflow"
 grep -Fq 'files: ./filtered-bin/release/*.*' "$workflow"
 
 printf 'release workflow checks passed\n'
