@@ -627,14 +627,6 @@ function log_lines(text, level, prefix) {
             log_message(as_string(prefix) + as_string(line), level);
 }
 
-function first_nonblank_line(path) {
-    let data = as_string(fs.readfile(path) || "");
-    for (let line in split(data, "\n"))
-        if (trim(as_string(line)) != "")
-            return as_string(line);
-    return "";
-}
-
 function last_nonblank_line(path) {
     let result = "";
     let data = as_string(fs.readfile(path) || "");
@@ -653,12 +645,31 @@ function log_file_lines(path, level, prefix) {
     log_lines(fs.readfile(path), level, prefix);
 }
 
+// sing-box prints deprecation warnings before the actual error, so prefer the
+// FATAL/ERROR line and drop terminal colour codes before it reaches the log.
+function check_failure_reason(path) {
+    let data = replace(as_string(fs.readfile(path) || ""), regexp("\u001b\\[[0-9;]*m", "g"), "");
+    let first = "", first_not_warning = "";
+    for (let line in split(data, "\n")) {
+        line = trim(as_string(line));
+        if (line == "")
+            continue;
+        if (match(line, /^(FATAL|ERROR)/))
+            return line;
+        if (first == "")
+            first = line;
+        if (first_not_warning == "" && !match(line, /^WARN/))
+            first_not_warning = line;
+    }
+    return first_not_warning != "" ? first_not_warning : first;
+}
+
 function sing_box_check(config_path, output_path) {
     let status = command_status(
         command_from_args([ "sing-box", "-c", config_path, "check" ]) +
         " >" + shell_quote(output_path) + " 2>&1"
     );
-    let reason = status == 0 ? "" : first_nonblank_line(output_path);
+    let reason = status == 0 ? "" : check_failure_reason(output_path);
     if (status != 0 && reason == "")
         reason = "exit status " + status;
     return { status, reason };
@@ -795,6 +806,7 @@ function init_config(populate_nft, caches_prepared, no_refresh, prepared_deferre
         exit(1);
     }
 
+    let current_sing_box_version = sing_box_version();
     let generate_status = command_status(
         module_command([
             LIB_DIR + "/singbox/generator.uc",
@@ -802,8 +814,9 @@ function init_config(populate_nft, caches_prepared, no_refresh, prepared_deferre
             temp_config,
             service_listen_address_value(settings),
             mwan3_active ? "1" : "0",
-            sing_box_is_extended(sing_box_version()) ? "1" : "0",
-            deferred_sections
+            sing_box_is_extended(current_sing_box_version) ? "1" : "0",
+            deferred_sections,
+            current_sing_box_version
         ]) + " >" + shell_quote(runtime_log) + " 2>&1"
     );
     if (generate_status != 0) {

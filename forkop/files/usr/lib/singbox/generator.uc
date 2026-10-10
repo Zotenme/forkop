@@ -21,6 +21,7 @@ let fixture_uci_data = null;
 let runtime_settings_cache = null;
 let runtime_ruleset_folder = runtime_constants.TMP_RULESET_FOLDER;
 let runtime_supports_xhttp = true;
+let runtime_sing_box_version = "";
 
 let as_string = common.as_string;
 let read_json_file = common.read_json_file;
@@ -406,6 +407,15 @@ function cli_bool(value) {
     return value === true || value == "1" || value == "true" || value == "yes" || value == "on";
 }
 
+function sing_box_at_least(major, minor) {
+    let parts = match(runtime_sing_box_version, /^v?([0-9]+)\.([0-9]+)/);
+    if (!parts)
+        return false;
+    let current_major = int(parts[1], 10);
+    let current_minor = int(parts[2], 10);
+    return current_major > major || (current_major == major && current_minor >= minor);
+}
+
 function tproxy_inbound_matcher() {
     return [ runtime_constants.TPROXY_INBOUND_TAG, runtime_constants.TPROXY_INBOUND6_TAG ];
 }
@@ -461,19 +471,23 @@ function base_config(settings, service_address, runtime_context) {
     runtime_context.dns_health_inbounds = dns_config.sniff_inbounds;
     runtime_context.default_domain_resolver = runtime_dns.default_domain_resolver(settings);
 
+    let dns = {
+        servers: dns_servers,
+        rules: dns_rules,
+        final: runtime_constants.DNS_SERVER_TAG,
+        strategy: option(settings, "dns_strategy", "prefer_ipv4")
+    };
+    // sing-box 1.14 always keeps a separate cache per server and deprecates the option.
+    if (!sing_box_at_least(1, 14))
+        dns.independent_cache = true;
+
     return {
         log: {
             disabled: false,
             level: log_level,
             timestamp: false
         },
-        dns: {
-            servers: dns_servers,
-            rules: dns_rules,
-            final: runtime_constants.DNS_SERVER_TAG,
-            strategy: option(settings, "dns_strategy", "prefer_ipv4"),
-            independent_cache: true
-        },
+        dns,
         ntp: {},
         certificate: {},
         endpoints: [],
@@ -2488,20 +2502,39 @@ function add_source_dns_matchers(rule, source_ip_cidr) {
 }
 
 function add_source_aware_bypass_dns_rules(config, matchers, rewrite_ttl) {
-    push_dns_matcher_rule(config, {
-        type: "logical",
-        mode: "and",
-        rules: [
-            copy_dns_matchers(matchers),
-            {
-                ip_cidr: [ runtime_constants.FAKEIP_INET4_RANGE, runtime_constants.FAKEIP_INET6_RANGE ],
-                invert: true
-            }
-        ],
-        action: "route",
-        server: runtime_constants.DNSMASQ_DNS_SERVER_TAG,
-        rewrite_ttl
-    });
+    let fakeip_ranges = [ runtime_constants.FAKEIP_INET4_RANGE, runtime_constants.FAKEIP_INET6_RANGE ];
+
+    // sing-box 1.14 rejects legacy address filter fields next to query_type rules,
+    // so the dnsmasq answer is evaluated first and returned unless it is a FakeIP.
+    if (sing_box_at_least(1, 14)) {
+        let evaluate = copy_dns_matchers(matchers);
+        evaluate.action = "evaluate";
+        evaluate.server = runtime_constants.DNSMASQ_DNS_SERVER_TAG;
+        evaluate.rewrite_ttl = rewrite_ttl;
+        push_dns_matcher_rule(config, evaluate);
+        push_dns_matcher_rule(config, {
+            type: "logical",
+            mode: "and",
+            rules: [
+                copy_dns_matchers(matchers),
+                { match_response: true, ip_cidr: fakeip_ranges, invert: true }
+            ],
+            action: "respond"
+        });
+    }
+    else {
+        push_dns_matcher_rule(config, {
+            type: "logical",
+            mode: "and",
+            rules: [
+                copy_dns_matchers(matchers),
+                { ip_cidr: fakeip_ranges, invert: true }
+            ],
+            action: "route",
+            server: runtime_constants.DNSMASQ_DNS_SERVER_TAG,
+            rewrite_ttl
+        });
+    }
 
     let fallback = copy_dns_matchers(matchers);
     fallback.action = "route";
@@ -3005,10 +3038,11 @@ function add_server_routes(config, servers, sections) {
     }
 }
 
-function generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections) {
+function generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections, sing_box_version) {
     runtime_supports_xhttp = supports_xhttp == null || as_string(supports_xhttp) == ""
         ? true
         : cli_bool(supports_xhttp);
+    runtime_sing_box_version = trim(as_string(sing_box_version));
     let cursor = uci_cursor();
     cursor.load(CONFIG_NAME);
     runtime_settings_cache = object_or_empty(cursor.get_all(CONFIG_NAME, "settings"));
@@ -3048,11 +3082,11 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
     }
 }
 
-function generate_config_fixture(fixture_path, output_path, service_address, mwan3_active, supports_xhttp, deferred_sections) {
+function generate_config_fixture(fixture_path, output_path, service_address, mwan3_active, supports_xhttp, deferred_sections, sing_box_version) {
     use_fixture_cursor(fixture_path);
     runtime_subscription.set_section_cache_dir(output_path + ".section-cache");
     runtime_ruleset_folder = output_path + ".rulesets";
-    generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections);
+    generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections, sing_box_version);
 }
 
 function stdin_length() {
@@ -3166,9 +3200,9 @@ function object_nonempty_stdin() {
 let mode = ARGV[0] || "";
 
 if (mode == "generate-config")
-    generate_config(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5] || "");
+    generate_config(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5] || "", ARGV[6] || "");
 else if (mode == "generate-config-fixture")
-    generate_config_fixture(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6] || "");
+    generate_config_fixture(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6] || "", ARGV[7] || "");
 else if (mode == "stdin-length")
     stdin_length();
 else if (mode == "stdin-contains")

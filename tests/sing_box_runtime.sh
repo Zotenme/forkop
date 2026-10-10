@@ -114,6 +114,21 @@ fi
 grep -Fq 'Generated sing-box configuration is invalid: " + check_result.reason' "$SINGBOX_RUNTIME_UC" ||
   fail "generated config failure must include the captured sing-box check diagnostic"
 
+cat >"$WORK_DIR/check-bin/sing-box" <<'EOF_SING_BOX_CHECK'
+#!/bin/sh
+printf '\033[33mWARN\033[0m[0000] `independent_cache` DNS option is deprecated in sing-box 1.14.0\n' >&2
+printf '\033[31mFATAL\033[0m[0000] initialize dns router: validate dns rule[4]\n' >&2
+exit 1
+EOF_SING_BOX_CHECK
+if PATH="$WORK_DIR/check-bin:$PATH" \
+  ucode -L "$FORKOP_LIB" "$SINGBOX_RUNTIME_UC" check-config-fixture \
+  "$WORK_DIR/invalid-config.json" "$WORK_DIR/sing-box-check.log" \
+  >"$WORK_DIR/sing-box-check.reason"; then
+  fail "singbox/runtime.uc check fixture should fail when sing-box reports a fatal error after a warning"
+fi
+[ "$(cat "$WORK_DIR/sing-box-check.reason")" = 'FATAL[0000] initialize dns router: validate dns rule[4]' ] ||
+  fail "singbox/runtime.uc must report the fatal sing-box check line without colour codes instead of a preceding deprecation warning"
+
 cat >"$WORK_DIR/generator-failure.log" <<'EOF_GENERATOR_FAILURE'
 skipped incompatible subscription outbound for rule 'only_xhttp': Only XHTTP node (XHTTP requires sing-box-extended)
 connection section has no usable outbounds
@@ -1074,6 +1089,9 @@ generate_config "$WORK_DIR/disabled-updates-fixture.json" "$WORK_DIR/disabled.js
 generate_config "$WORK_DIR/default-updates-fixture.json" "$WORK_DIR/default.json"
 generate_config "$WORK_DIR/server-inbound-fixture.json" "$WORK_DIR/server.json"
 generate_config "$WORK_DIR/runtime-matchers-fixture.json" "$WORK_DIR/matchers.json"
+mkdir -p "$WORK_DIR/matchers-1.14.json.section-cache" "$WORK_DIR/matchers-1.14.json.rulesets"
+ucode -L "$FORKOP_LIB" "$SINGBOX_GENERATOR_UC" generate-config-fixture \
+  "$WORK_DIR/runtime-matchers-fixture.json" "$WORK_DIR/matchers-1.14.json" "127.0.0.1" "0" "" "" "1.14.1-extended-2.7.2"
 generate_config "$WORK_DIR/dns-action-fixture.json" "$WORK_DIR/dns-action.json"
 generate_config "$WORK_DIR/urltest-filter-fixture.json" "$WORK_DIR/urltest.json"
 if generate_config "$WORK_DIR/manual-http-fixture.json" "$WORK_DIR/manual-http.json" \
@@ -1278,6 +1296,26 @@ assert(bypass_dnsmasq != null, "filtered bypass probes dnsmasq before real DNS f
 assert(contains(bypass_dnsmasq.rules[0].inbound, "source-dns-in"), "filtered bypass DNS is limited to source-aware DNS clients");
 assert(contains(bypass_dnsmasq.rules[0].source_ip_cidr, "10.0.0.3/32"), "filtered bypass DNS keeps the client source");
 assert(bypass_dnsmasq.rules[1].invert === true && contains(bypass_dnsmasq.rules[1].ip_cidr, "198.18.0.0/15") && contains(bypass_dnsmasq.rules[1].ip_cidr, "fc00::/18"), "filtered bypass rejects nested FakeIP answers");
+assert(bypass_dnsmasq.rules[1].match_response == null, "sing-box before 1.14 keeps the legacy address filter");
+assert(matchers.dns.independent_cache === true, "sing-box before 1.14 keeps independent DNS cache enabled");
+let matchers_114 = cfg("matchers-1.14");
+assert(!exists(matchers_114.dns, "independent_cache"), "sing-box 1.14 config omits the deprecated independent_cache option");
+let bypass_evaluate_index = dns_rule_index(matchers_114, r =>
+    r.action == "evaluate" && r.server == "dnsmasq-server" && contains(r.domain_suffix, "example.org") &&
+    contains(r.inbound, "source-dns-in") && contains(r.source_ip_cidr, "10.0.0.3/32"));
+let bypass_respond_index = dns_rule_index(matchers_114, r =>
+    r.type == "logical" && r.action == "respond" && length(r.rules || []) == 2 &&
+    contains(r.rules[0].domain_suffix, "example.org"));
+assert(bypass_evaluate_index >= 0 && bypass_respond_index == bypass_evaluate_index + 1, "sing-box 1.14 filtered bypass evaluates dnsmasq right before responding");
+let bypass_respond = matchers_114.dns.rules[bypass_respond_index];
+assert(bypass_respond.server == null && contains(bypass_respond.rules[0].source_ip_cidr, "10.0.0.3/32"), "sing-box 1.14 respond rule keeps the client source");
+assert(bypass_respond.rules[1].match_response === true && bypass_respond.rules[1].invert === true &&
+    contains(bypass_respond.rules[1].ip_cidr, "198.18.0.0/15") && contains(bypass_respond.rules[1].ip_cidr, "fc00::/18"), "sing-box 1.14 filtered bypass matches FakeIP against the evaluated response");
+let bypass_real_114_index = dns_rule_index(matchers_114, r =>
+    r.server == "dns-server" && contains(r.domain_suffix, "example.org") &&
+    contains(r.source_ip_cidr, "10.0.0.3/32") && contains(r.query_type, "A"));
+assert(bypass_real_114_index == bypass_respond_index + 1, "sing-box 1.14 filtered bypass still falls back to real address resolution");
+assert(dns_rule(matchers_114, r => r.match_response == null && (r.ip_cidr != null || (r.type == "logical" && length(filter(r.rules, s => s.match_response == null && s.ip_cidr != null)) > 0))) == null, "sing-box 1.14 config has no legacy address filter fields");
 let bypass_real = dns_rule(matchers, r =>
     r.server == "dns-server" && contains(r.domain_suffix, "example.org") &&
     contains(r.source_ip_cidr, "10.0.0.3/32"));
