@@ -23,6 +23,8 @@ let runtime_ruleset_folder = runtime_constants.TMP_RULESET_FOLDER;
 let runtime_supports_xhttp = true;
 let runtime_sing_box_version = "";
 
+const DEFAULT_HTTP_CLIENT_TAG = "direct-http-client";
+
 let as_string = common.as_string;
 let read_json_file = common.read_json_file;
 let read_stdin = common.read_stdin;
@@ -3038,6 +3040,35 @@ function add_server_routes(config, servers, sections) {
     }
 }
 
+// sing-box 1.14 deprecates download_detour and the implicit HTTP client that
+// remote rule-sets use by default, so downloads go through named http_clients.
+// The default client has no detour: it dials directly with the route defaults,
+// like direct-out, which cannot be a detour target because it is empty.
+function add_http_clients(config) {
+    if (!sing_box_at_least(1, 14))
+        return;
+
+    let clients = [ { tag: DEFAULT_HTTP_CLIENT_TAG } ];
+    let registered = { [DEFAULT_HTTP_CLIENT_TAG]: true };
+    for (let rule_set in array_or_empty(config.route.rule_set)) {
+        if (type(rule_set) != "object" || rule_set.type != "remote")
+            continue;
+        let detour = as_string(rule_set.download_detour || "");
+        delete rule_set.download_detour;
+        if (detour == "")
+            continue;
+        let tag = detour + "-http-client";
+        if (!registered[tag]) {
+            registered[tag] = true;
+            push(clients, { tag, detour });
+        }
+        rule_set.http_client = tag;
+    }
+
+    config.http_clients = clients;
+    config.route.default_http_client = DEFAULT_HTTP_CLIENT_TAG;
+}
+
 function generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections, sing_box_version) {
     runtime_supports_xhttp = supports_xhttp == null || as_string(supports_xhttp) == ""
         ? true
@@ -3074,6 +3105,7 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
     for (let section in sections)
         add_mixed_proxy_for_section(config, section, service_address);
 
+    add_http_clients(config);
     assert_unique_outbound_tags(config);
     strip_internal_fields(config);
     if (!write_json_file(output_path, config)) {

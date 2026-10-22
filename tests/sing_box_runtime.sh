@@ -1093,6 +1093,11 @@ mkdir -p "$WORK_DIR/matchers-1.14.json.section-cache" "$WORK_DIR/matchers-1.14.j
 ucode -L "$FORKOP_LIB" "$SINGBOX_GENERATOR_UC" generate-config-fixture \
   "$WORK_DIR/runtime-matchers-fixture.json" "$WORK_DIR/matchers-1.14.json" "127.0.0.1" "0" "" "" "1.14.1-extended-2.7.2"
 generate_config "$WORK_DIR/dns-action-fixture.json" "$WORK_DIR/dns-action.json"
+for name in dns-action download-via-proxy; do
+  mkdir -p "$WORK_DIR/$name-1.14.json.section-cache" "$WORK_DIR/$name-1.14.json.rulesets"
+  ucode -L "$FORKOP_LIB" "$SINGBOX_GENERATOR_UC" generate-config-fixture \
+    "$WORK_DIR/$name-fixture.json" "$WORK_DIR/$name-1.14.json" "127.0.0.1" "0" "" "" "1.14.0"
+done
 generate_config "$WORK_DIR/urltest-filter-fixture.json" "$WORK_DIR/urltest.json"
 if generate_config "$WORK_DIR/manual-http-fixture.json" "$WORK_DIR/manual-http.json" \
   >"$WORK_DIR/manual-http.stdout" 2>"$WORK_DIR/manual-http.stderr"; then
@@ -1433,6 +1438,29 @@ assert(inbound(download, "service-components-in") != null, "components service m
 assert(route_rule(download, r => r.inbound == "service-components-in" && r.outbound == "components_proxy-out") != null, "components service mixed route");
 assert(ruleset(download, "proxy-discord-community-ruleset").download_detour == "proxy-out", "download_detour on community ruleset");
 assert(ruleset_url(download, "https://example.com/rules.srs").download_detour == "proxy-out", "download_detour on custom remote ruleset");
+assert(download.http_clients == null && download.route.default_http_client == null, "sing-box before 1.14 config has no http_clients");
+
+function http_client(config, tag) {
+    for (let item in config.http_clients || [])
+        if (item && item.tag == tag)
+            return item;
+    return null;
+}
+
+let download_114 = cfg("download-via-proxy-1.14");
+let download_114_community = ruleset(download_114, "proxy-discord-community-ruleset");
+let download_114_custom = ruleset_url(download_114, "https://example.com/rules.srs");
+assert(download_114.route.default_http_client == "direct-http-client", "sing-box 1.14 sets the default HTTP client");
+assert(http_client(download_114, "direct-http-client") != null && http_client(download_114, "direct-http-client").detour == null, "sing-box 1.14 default HTTP client dials directly");
+assert(http_client(download_114, "proxy-out-http-client").detour == "proxy-out", "sing-box 1.14 HTTP client for proxied downloads uses the proxy outbound");
+assert(length(download_114.http_clients) == 2, "sing-box 1.14 registers each HTTP client once");
+assert(download_114_community.http_client == "proxy-out-http-client" && download_114_community.download_detour == null, "sing-box 1.14 community ruleset uses http_client instead of download_detour");
+assert(download_114_custom.http_client == "proxy-out-http-client" && download_114_custom.download_detour == null, "sing-box 1.14 custom remote ruleset uses http_client instead of download_detour");
+
+let dns_action_114 = cfg("dns-action-1.14");
+let direct_ruleset_114 = ruleset_url(dns_action_114, "https://example.com/domain-only.srs");
+assert(dns_action_114.route.default_http_client == "direct-http-client" && length(dns_action_114.http_clients) == 1, "sing-box 1.14 config without proxied downloads has only the default HTTP client");
+assert(direct_ruleset_114.http_client == null && direct_ruleset_114.download_detour == null, "sing-box 1.14 direct remote ruleset uses the default HTTP client");
 
 let fully = cfg("fully-routed");
 assert(route_rule(fully, r => r.outbound == "bypass-out" && contains(r.inbound, "tproxy-in") && contains(r.inbound, "tproxy6-in") && contains(r.source_ip_cidr, "192.168.1.20/32") && contains(r.source_ip_cidr, "192.168.1.30/32") && contains(r.source_ip_cidr, "2001:db8::20/128")) != null, "fully routed bypass IP route");
