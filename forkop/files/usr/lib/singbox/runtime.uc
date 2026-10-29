@@ -442,21 +442,6 @@ function remove_managed_service_script() {
     remove_file("/etc/init.d/sing-box");
 }
 
-function disable_service_config() {
-    if (!ensure_sing_box_main_section())
-        return;
-    uci_set_option("sing-box", "main", "enabled", "0");
-    uci_commit("sing-box");
-}
-
-function prepare_service_disabled() {
-    disable_service_config();
-    if (file_exists("/etc/init.d/sing-box")) {
-        command_success_from_args([ "/etc/init.d/sing-box", "stop" ]);
-        command_success_from_args([ "/etc/init.d/sing-box", "disable" ]);
-    }
-}
-
 function configure_service() {
     let settings = uci_settings();
 
@@ -887,8 +872,6 @@ else if (mode == "managed-service-installed")
     exit(managed_service_installed() ? 0 : 1);
 else if (mode == "remove-managed-service-script")
     remove_managed_service_script();
-else if (mode == "prepare-service-disabled")
-    prepare_service_disabled();
 else if (mode == "service-proxy-address")
     print(service_proxy_address(uci_settings(), ARGV[1] || "lists"), "\n");
 else if (mode == "service-listen-address") {
@@ -915,16 +898,12 @@ else if (mode == "read-version-state")
     print(sing_box_version_state(), "\n");
 else if (mode == "write-version-state")
     exit(sing_box_write_version_state(ARGV[1]) ? 0 : 1);
-else if (mode == "clear-version-state")
-    exit(sing_box_clear_version_state() ? 0 : 1);
 else if (mode == "restore-version-state")
     exit(sing_box_restore_version_state(ARGV[1]) ? 0 : 1);
 else if (mode == "read-variant-marker")
     print(sing_box_variant_marker(), "\n");
 else if (mode == "write-variant-marker")
     exit(sing_box_write_variant_marker(ARGV[1]) ? 0 : 1);
-else if (mode == "clear-variant-marker")
-    exit(sing_box_clear_variant_marker() ? 0 : 1);
 else if (mode == "restore-variant-marker")
     exit(sing_box_restore_variant_marker(ARGV[1]) ? 0 : 1);
 else if (mode == "marker-is")
