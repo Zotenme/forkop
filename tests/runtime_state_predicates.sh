@@ -278,6 +278,30 @@ state_ucode acquire-runtime-dir-lock "$LOCK_DIR" "$$" ||
 assert_eq "$$" "$(cat "$LOCK_DIR/pid")" "stale runtime lock owner pid"
 state_ucode release-runtime-dir-lock "$LOCK_DIR"
 
+LOCK_BIN="$WORK_DIR/lock-bin"
+mkdir -p "$LOCK_BIN"
+cat >"$LOCK_BIN/mkdir" <<MKDIR
+#!/usr/bin/env bash
+"$(command -v mkdir)" "\$@" || exit \$?
+[ "\$1" != "$LOCK_DIR" ] || "$(command -v mkdir)" "\$1/pid"
+MKDIR
+chmod 0755 "$LOCK_BIN/mkdir"
+
+assert_lock_rejected_without_owner() {
+  local status=0 output
+  output="$(PATH="$LOCK_BIN:$PATH" state_ucode acquire-runtime-dir-lock "$LOCK_DIR" "$$" 2>&1)" || status=$?
+  assert_eq "1" "$status" "$1: lock status when owner pid cannot be written ($output)"
+  [ -z "$output" ] || fail "$1: lock failure should not print errors: $output"
+}
+
+rm -rf "$LOCK_DIR"
+assert_lock_rejected_without_owner "new runtime lock"
+rm -rf "$LOCK_DIR"
+mkdir -p "$LOCK_DIR"
+printf '%s\n' 999999 >"$LOCK_DIR/pid"
+assert_lock_rejected_without_owner "stale runtime lock"
+rm -rf "$LOCK_DIR"
+
 SNAPSHOT_FILE="$WORK_DIR/reload-state.snapshot"
 TARGET_RELOAD_STATE="$WORK_DIR/reload-state.target"
 CACHE_DIR="$WORK_DIR/rule-cache"
