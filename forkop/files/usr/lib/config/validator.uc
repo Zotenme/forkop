@@ -14,6 +14,8 @@ let rule_config = require("config.rule");
 let connections = require("config.connections");
 
 const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
+const MWAN3_INIT = getenv("MWAN3_INIT") || "/etc/init.d/mwan3";
+const MWAN3_CONFIG = getenv("MWAN3_CONFIG") || "/etc/config/mwan3";
 const DEFAULT_LATENCY_TEST_URL = "https://www.gstatic.com/generate_204";
 const TAILSCALE_FWMARK_MASK = 0x00ff0000;
 
@@ -661,6 +663,12 @@ function mwan3_has_enabled_interface() {
     return mwan3_has_enabled_interface_text(read_stdin());
 }
 
+function uci_core() {
+    if (uci_core_module == null)
+        uci_core_module = require("core.uci");
+    return uci_core_module;
+}
+
 function mwan3_has_enabled_interface_from_sections() {
     for (let section in uci_core().section_objects("mwan3", "interface"))
         if (option(section, "enabled", "0") == "1")
@@ -669,14 +677,14 @@ function mwan3_has_enabled_interface_from_sections() {
 }
 
 function mwan3_is_active() {
-    if (!file_executable("/etc/init.d/mwan3") || !file_nonempty("/etc/config/mwan3"))
+    if (!file_executable(MWAN3_INIT) || !file_nonempty(MWAN3_CONFIG))
         return false;
 
     if (!mwan3_has_enabled_interface_from_sections())
         return false;
 
-    return command_success_from_args([ "/etc/init.d/mwan3", "status" ]) ||
-        command_success_from_args([ "/etc/init.d/mwan3", "enabled" ]);
+    return command_success_from_args([ MWAN3_INIT, "status" ]) ||
+        command_success_from_args([ MWAN3_INIT, "enabled" ]);
 }
 
 function hex_digit_value(value) {
@@ -735,12 +743,6 @@ function runtime_constants() {
     if (constants_module == null)
         constants_module = require("core.constants");
     return constants_module;
-}
-
-function uci_core() {
-    if (uci_core_module == null)
-        uci_core_module = require("core.uci");
-    return uci_core_module;
 }
 
 function fixture_section_list(type_name) {
