@@ -124,6 +124,11 @@ for (let rule in multi.dns.rules || []) {
     }
 }
 assert(health_rules == 5, "each candidate and the canonical active DNS have an inbound-specific rule");
+let health_reject = null;
+for (let rule in multi.route.rules || [])
+    if (rule.action == "reject" && type(rule.inbound) == "array" && index(rule.inbound, "dns-in") >= 0)
+        health_reject = rule;
+assert(health_reject != null && length(health_reject.inbound) == 6, "non-DNS traffic on dns-in and every health inbound is rejected");
 ' "$WORK_DIR/single-config.json" "$WORK_DIR/multi-config.json"
 
 cat >"$WORK_DIR/select-state.json" <<'JSON'

@@ -1293,6 +1293,11 @@ assert(route_rule(matchers, r => r.inbound == "proxy-mixed-in" && r.outbound == 
 let source_dns_in = inbound(matchers, "source-dns-in");
 assert(source_dns_in && source_dns_in.type == "direct" && source_dns_in.listen == "::" && source_dns_in.listen_port == 1603, "source-aware DNS uses one dual-stack inbound");
 assert(route_rule(matchers, r => r.action == "sniff" && contains(r.inbound, "source-dns-in")) != null, "source-aware DNS inbound is sniffed before hijacking");
+let dns_leftover_index = route_rule_index(matchers, r => r.action == "reject" && contains(r.inbound, "source-dns-in") && contains(r.inbound, "dns-in"));
+assert(dns_leftover_index > route_rule_index(matchers, r => r.action == "hijack-dns" && r.protocol == "dns"), "non-DNS traffic on DNS inbounds is rejected after hijacking");
+assert(!contains(matchers.route.rules[dns_leftover_index].inbound, "tproxy-in"), "the DNS inbound reject leaves TProxy traffic to the sections");
+for (let i = 0; i < dns_leftover_index; i++)
+    assert(matchers.route.rules[i].action != "route", "non-DNS traffic on DNS inbounds is rejected before any route rule");
 assert(dns_server(matchers, r => r.tag == "dnsmasq-server" && r.type == "udp" && r.server == "127.0.0.1" && r.server_port == 53) != null, "source-aware DNS uses the existing dnsmasq instance");
 let bypass_dnsmasq = dns_rule(matchers, r =>
     r.type == "logical" && r.server == "dnsmasq-server" &&
