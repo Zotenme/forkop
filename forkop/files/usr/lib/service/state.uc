@@ -32,16 +32,6 @@ function read_stdin() {
     return data == null ? "" : data;
 }
 
-function read_stdin_json() {
-    let data = read_stdin();
-    try {
-        return json(data);
-    }
-    catch (e) {
-        return null;
-    }
-}
-
 function read_json_file(path) {
     let data = fs.readfile(path);
     if (data == null)
@@ -141,22 +131,6 @@ function read_state_value(path, needle) {
             return;
         }
     }
-}
-
-function state_has_key(path, needle) {
-    let data = fs.readfile(path);
-    if (data == null)
-        return false;
-
-    needle = as_string(needle);
-    for (let line in split(data, "\n")) {
-        let equals = index(line, "=");
-        let key = equals >= 0 ? substr(line, 0, equals) : line;
-        if (key == needle)
-            return true;
-    }
-
-    return false;
 }
 
 const RELOAD_STATE_FIELDS = [
@@ -378,25 +352,6 @@ function clear_reload_state(path, snapshot_path) {
     cleanup_reload_state_snapshots(path);
 }
 
-function remove_file(path) {
-    unlink_file(path);
-}
-
-function reload_state_values_from_args(offset) {
-    let values = {};
-    offset = int(offset || 0);
-
-    for (let i = 0; i < length(RELOAD_STATE_FIELDS); i++)
-        values[RELOAD_STATE_FIELDS[i]] = ARGV[i + offset];
-
-    return values;
-}
-
-function response_success() {
-    let value = read_stdin_json();
-    return type(value) == "object" && value.success === true;
-}
-
 function stdin_first_field() {
     let data = read_stdin();
     let newline = index(data, "\n");
@@ -417,12 +372,6 @@ function sing_box_service_pid_from_value(value) {
     }
 
     return 0;
-}
-
-function sing_box_service_pid() {
-    let pid = sing_box_service_pid_from_value(read_stdin_json());
-    if (pid > 0)
-        print(pid, "\n");
 }
 
 function sing_box_service_pid_runtime() {
@@ -1787,8 +1736,6 @@ if (mode == "file-first-line")
     file_first_line(ARGV[1]);
 else if (mode == "get")
     read_state_value(ARGV[1], ARGV[2]);
-else if (mode == "has-key")
-    exit(state_has_key(ARGV[1], ARGV[2]) ? 0 : 1);
 else if (mode == "time-sync-needed")
     exit(time_sync_needed(ARGV[1]) ? 0 : 1);
 else if (mode == "sync-time-if-needed")
@@ -1811,28 +1758,20 @@ else if (mode == "hup-sing-box-runtime")
     hup_sing_box_runtime();
 else if (mode == "clear-reload-state")
     clear_reload_state(ARGV[1], ARGV[2]);
-else if (mode == "remove-file")
-    remove_file(ARGV[1]);
 else if (mode == "capture-reload-state")
     capture_reload_state(ARGV[1], ARGV[2] || "1");
 else if (mode == "write-current-reload-state-clean")
     write_current_reload_state_clean(ARGV[1], ARGV[2] || "1", ARGV[3]);
 else if (mode == "write-captured-reload-state")
     write_captured_reload_state(ARGV[1], ARGV[2], ARGV[3] || "1", ARGV[4], ARGV[5], ARGV[6]);
-else if (mode == "write-reload-state")
-    write_reload_state(ARGV[1], reload_state_values_from_args(2));
 else if (mode == "write-current-reload-state")
     write_reload_state(ARGV[1], current_reload_state_values(ARGV[2] || "1"));
 else if (mode == "reload-state-text-fixture") {
     let data = fixture_data(ARGV[1]);
     print(reload_state_text(fixture_reload_state_values(data, ARGV[2] || "1")));
 }
-else if (mode == "response-success")
-    exit(response_success() ? 0 : 1);
 else if (mode == "stdin-first-field")
     stdin_first_field();
-else if (mode == "sing-box-service-pid")
-    sing_box_service_pid();
 else if (mode == "sing-box-service-runtime-pid") {
     let pid = sing_box_service_pid_runtime();
     if (pid <= 0)
@@ -1891,10 +1830,6 @@ else if (mode == "sing-box-signature-fixture") {
     let data = fixture_data(ARGV[1]);
     exit(print_signature_hash(sing_box_signature_body(fixture_settings(data), fixture_section_list(data), fixture_servers(data), fixture_mwan3_active(data))) ? 0 : 1);
 }
-else if (mode == "sing-box-signature-body-fixture") {
-    let data = fixture_data(ARGV[1]);
-    print(sing_box_signature_body(fixture_settings(data), fixture_section_list(data), fixture_servers(data), fixture_mwan3_active(data)));
-}
 else if (mode == "nft-signature")
     exit(print_signature_hash(nft_runtime_signature_body(uci_settings(), uci_sections("section"))) ? 0 : 1);
 else if (mode == "nft-signature-fixture") {
@@ -1943,10 +1878,6 @@ else if (mode == "settings-update-interval-fixture") {
     let data = fixture_data(ARGV[1]);
     print(settings_update_interval(fixture_settings(data)), "\n");
 }
-else if (mode == "remote-ruleset-update-interval") {
-    let update_interval = settings_update_interval(uci_settings());
-    print(update_interval != "" ? update_interval : as_string(ARGV[1]), "\n");
-}
 else if (mode == "subscription-update-interval")
     print(section_subscription_update_interval(uci_section(ARGV[1])), "\n");
 else if (mode == "subscription-update-interval-fixture") {
@@ -1988,10 +1919,6 @@ else if (mode == "cron-signature")
 else if (mode == "cron-signature-fixture") {
     let data = fixture_data(ARGV[1]);
     exit(print_signature_hash(cron_signature_body(fixture_settings(data), fixture_section_list(data))) ? 0 : 1);
-}
-else if (mode == "cron-signature-body-fixture") {
-    let data = fixture_data(ARGV[1]);
-    print(cron_signature_body(fixture_settings(data), fixture_section_list(data)));
 }
 else if (mode == "urltest-enabled-sections")
     print_urltest_enabled_sections(uci_sections("section"));
