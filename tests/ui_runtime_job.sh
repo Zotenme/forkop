@@ -245,6 +245,35 @@ if (!value.progress || value.progress.completed !== 0 || value.progress.total !=
 }
 NODE
 
+unwritable_lock_dir="$WORK_DIR/unwritable-service-actions.lock"
+lock_bin="$WORK_DIR/lock-bin"
+mkdir -p "$lock_bin"
+cat >"$lock_bin/mkdir" <<MKDIR
+#!/usr/bin/env bash
+"$(command -v mkdir)" "\$@" || exit \$?
+[ "\$1" != "$unwritable_lock_dir" ] || "$(command -v mkdir)" "\$1/pid"
+MKDIR
+chmod 0755 "$lock_bin/mkdir"
+
+assert_service_action_busy_without_lock_owner() {
+  local status=0 output
+  output="$(PATH="$lock_bin:$PATH" FORKOP_UI_SERVICE_ACTION_LOCK_DIR="$unwritable_lock_dir" \
+    ui_ucode service-action-begin-if-idle reload test 2>&1)" || status=$?
+  assert_eq "2" "$status" "$1: service action status when lock owner cannot be written ($output)"
+  [ -z "$output" ] || fail "$1: service action lock failure should not print errors: $output"
+  if ls "$FORKOP_UI_SERVICE_ACTION_DIR"/*.json >/dev/null 2>&1; then
+    fail "$1: service action must not start without the lock"
+  fi
+}
+
+rm -rf "$unwritable_lock_dir"
+assert_service_action_busy_without_lock_owner "new service action lock"
+rm -rf "$unwritable_lock_dir"
+mkdir -p "$unwritable_lock_dir"
+printf '%s\n' 999999 >"$unwritable_lock_dir/pid"
+assert_service_action_busy_without_lock_owner "stale service action lock"
+rm -rf "$unwritable_lock_dir"
+
 job_id="$(ui_ucode service-action-begin-if-idle reload test)"
 [ -n "$job_id" ] || fail "service-action-begin-if-idle should create a job"
 service_state="$FORKOP_UI_SERVICE_ACTION_DIR/$job_id.json"
