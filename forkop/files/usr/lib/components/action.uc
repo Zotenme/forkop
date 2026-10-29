@@ -1883,13 +1883,7 @@ let mode = ARGV[0] || "";
 
 if (mode == "component-action")
     component_action(ARGV[1], ARGV[2]);
-else if (mode == "latest-forkop-release-json")
-    print(latest_forkop_release_json());
-else if (mode == "latest-forkop-version")
-    print(latest_forkop_version(), "\n");
-else if (mode == "forkop-release-metadata")
-    print(fetch_forkop_latest_release_metadata(), "\n");
 else {
-    warn("Usage: components/action.uc <component-action|latest-forkop-version|forkop-release-metadata> ...\n");
+    warn("Usage: components/action.uc component-action <component> <action>\n");
     exit(1);
 }
