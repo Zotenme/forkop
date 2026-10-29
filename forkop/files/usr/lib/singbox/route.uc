@@ -18,17 +18,23 @@ function bool_value(value) {
 function config(settings, runtime) {
     let output_network_interface = option(settings, "output_network_interface", "");
     let mwan3_active = type(runtime) == "object" && bool_value(runtime.mwan3_active);
-    let sniff_inbounds = [ runtime_constants.TPROXY_INBOUND_TAG, runtime_constants.DNS_INBOUND_TAG ];
+    let dns_inbounds = [ runtime_constants.DNS_INBOUND_TAG ];
     if (type(runtime) == "object" && bool_value(runtime.source_aware_dns))
-        push(sniff_inbounds, runtime_constants.SOURCE_DNS_INBOUND_TAG);
+        push(dns_inbounds, runtime_constants.SOURCE_DNS_INBOUND_TAG);
     if (type(runtime) == "object" && type(runtime.dns_health_inbounds) == "array")
         for (let inbound in runtime.dns_health_inbounds)
-            push(sniff_inbounds, inbound);
+            push(dns_inbounds, inbound);
+    let sniff_inbounds = [ runtime_constants.TPROXY_INBOUND_TAG ];
+    for (let inbound in dns_inbounds)
+        push(sniff_inbounds, inbound);
     let result = {
         rules: [
             { action: "sniff", inbound: sniff_inbounds },
             { action: "hijack-dns", port: 53 },
-            { action: "hijack-dns", protocol: "dns" }
+            { action: "hijack-dns", protocol: "dns" },
+            // What a DNS inbound holds and is no query would reach the direct outbound, whose
+            // destination is the inbound's own listen address, and loop back in as a new session.
+            { action: "reject", inbound: dns_inbounds }
         ],
         rule_set: [],
         final: runtime_constants.DIRECT_OUTBOUND_TAG,
