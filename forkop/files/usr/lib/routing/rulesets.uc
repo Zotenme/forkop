@@ -524,19 +524,9 @@ if (mode == "create-source")
     create_source(ARGV[1]);
 else if (mode == "tag")
     print(ruleset_tag(ARGV[1], ARGV[2], ARGV[3]), "\n");
-else if (mode == "patch-source")
-    patch_source(ARGV[1], ARGV[2], ARGV[3]);
 else if (mode == "import-plain-list")
     import_plain_list(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6], ARGV[7]);
-else if (mode == "extract-ip-cidr")
-    extract_ip_cidr(ARGV[1], ARGV[2]);
-else if (mode == "extract-ip-cidr-nft")
-    extract_ip_cidr_nft_elements(ARGV[1], ARGV[2], ARGV[3], ARGV[4] || "[]", ARGV[5] || "[]");
-else if (mode == "has-domain-matchers")
-    exit(has_domain_matchers(ARGV[1]) ? 0 : 1);
-else if (mode == "has-rules")
-    exit(has_rules(ARGV[1]) ? 0 : 1);
 else {
-    warn("Usage: routing/rulesets.uc <create-source|tag|patch-source|import-plain-list|extract-ip-cidr|extract-ip-cidr-nft|has-domain-matchers|has-rules> ...\n");
+    warn("Usage: routing/rulesets.uc <create-source|tag|import-plain-list> ...\n");
     exit(1);
 }
