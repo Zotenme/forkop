@@ -85,6 +85,7 @@ docker run --rm -v "$PWD":/src -v forkop-node-modules:/src/fe-app-forkop/node_mo
 
 - Вся логика службы пишется на ucode. Shell допустим только в `forkop/files/etc/init.d/forkop` и `luci-app-forkop/root/etc/uci-defaults/50_luci-forkop`; `tests/shell_inventory.sh` падает, если появляется другой shell-файл.
 - Каждый `.uc` должен проходить `ucode -c` и `ucode -S -c` (строгий режим).
+- Функция объявляется выше всех мест, где её вызывают: ucode связывает имена при компиляции, и вызов функции, объявленной ниже, падает во время выполнения с `left-hand side is not a function`. `ucode -c` этого не ловит — ловит `tests/function_order.sh`.
 - Пути, имена и URL берутся из `core/constants.uc`, где каждое значение переопределяется переменной окружения. Тесты опираются на это: подменяют `FORKOP_LIB`, `FORKOP_CONFIG` и т. п. и подкладывают фальшивые `uci`, `nft`, `sing-box`, `curl` через `PATH`. Новые внешние зависимости добавляй тем же способом, а не хардкодом.
 - Строка `__COMPILED_VERSION_VARIABLE__` в `constants.uc` заменяется версией при сборке — не трогать.
 - Изменения формата UCI-конфига требуют миграции в `config/migration.uc` и обновления `tests/config_migration.sh` и `tests/config_contract_matrix.sh`.
