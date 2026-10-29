@@ -62,12 +62,20 @@ describe('diagnostic masking', () => {
       "\toption proxy_string 'vless://secret@example.com:443'",
       "\toption hwid 'device-secret'",
       "\tlist domain 'example.com'",
+      "\toption domain 'private-one.example",
+      "private-two.example'",
+      "\toption ip_cidr '203.0.113.7/32'",
+      "\toption action 'bypass'",
       "\toption outbound_json '{",
       '  "server": "example.com",',
       "}'",
       "config interface 'lan'",
       "\toption ipaddr '192.168.1.1'",
       "\toption netmask '255.255.255.0'",
+      'config device',
+      "\toption macaddr '02:00:00:00:00:01'",
+      "config globals 'globals'",
+      "\toption ula_prefix 'fd00:1234:5678::/48'",
       "config interface 'wan'",
       "\toption username 'provider-user'",
       "\toption password 'provider-password'",
@@ -88,6 +96,13 @@ describe('diagnostic masking', () => {
     expect(masked).not.toContain('provider-password');
     expect(masked).not.toContain('token=secret');
     expect(masked).not.toContain('wireguard-private-secret');
+    expect(masked).not.toContain('private-one.example');
+    expect(masked).not.toContain('private-two.example');
+    expect(masked).not.toContain('203.0.113.7');
+    expect(masked).not.toContain('02:00:00:00:00:01');
+    expect(masked).not.toContain('fd00:1234:5678');
+    expect(masked).toContain("option domain 'MASKED'");
+    expect(masked).toContain("option action 'bypass'");
     expect(masked).toContain("option proxy_string 'MASKED'");
     expect(masked).toContain("option ipaddr 'MASKED'");
     expect(masked).toContain("option url 'MASKED'");

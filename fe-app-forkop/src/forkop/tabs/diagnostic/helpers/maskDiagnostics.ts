@@ -48,15 +48,23 @@ const FORKOP_MASK_AFTER_TOKEN = [
   'option yacd_secret_key',
 ];
 
+const MASKED_RULE_OPTIONS = [
+  'domain',
+  'domain_suffix',
+  'domain_keyword',
+  'domain_regex',
+  'ip_cidr',
+  'source_ip_cidr',
+  'fully_routed_ips',
+];
+
 const FORKOP_MASK_AFTER_TOKEN_SPACE = [
   'option outbound_json',
-  'list domain',
-  'list domain_suffix',
-  'list domain_keyword',
-  'list domain_regex',
-  'list ip_cidr',
-  'list source_ip_cidr',
-  'list fully_routed_ips',
+  ...MASKED_RULE_OPTIONS.flatMap((key) => [
+    `option ${key}`,
+    `option ${key}_text`,
+    `list ${key}`,
+  ]),
   'option dns_server',
   'option bootstrap_dns_server',
   'list dns_server',
@@ -83,6 +91,8 @@ const FORKOP_MASK_AFTER_TOKEN_SPACE = [
   'option ipaddr',
   'option netmask',
   'option gateway',
+  'option macaddr',
+  'option ula_prefix',
   'option username',
   'option password',
   'option private_key',
@@ -223,7 +233,8 @@ export function maskGlobalCheckText(text: string = '') {
 
       const maskedLine = maskGlobalCheckLine(line);
 
-      if (line.includes('option outbound_json')) {
+      // Text values (outbound_json, domain lists) may continue on the next lines.
+      if (maskedLine !== line) {
         const firstQuote = line.indexOf("'");
 
         if (firstQuote >= 0 && line.slice(firstQuote + 1).indexOf("'") < 0) {

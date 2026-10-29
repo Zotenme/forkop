@@ -9501,15 +9501,22 @@ var FORKOP_MASK_AFTER_TOKEN = [
   "list reality_short_id",
   "option yacd_secret_key"
 ];
+var MASKED_RULE_OPTIONS = [
+  "domain",
+  "domain_suffix",
+  "domain_keyword",
+  "domain_regex",
+  "ip_cidr",
+  "source_ip_cidr",
+  "fully_routed_ips"
+];
 var FORKOP_MASK_AFTER_TOKEN_SPACE = [
   "option outbound_json",
-  "list domain",
-  "list domain_suffix",
-  "list domain_keyword",
-  "list domain_regex",
-  "list ip_cidr",
-  "list source_ip_cidr",
-  "list fully_routed_ips",
+  ...MASKED_RULE_OPTIONS.flatMap((key) => [
+    `option ${key}`,
+    `option ${key}_text`,
+    `list ${key}`
+  ]),
   "option dns_server",
   "option bootstrap_dns_server",
   "list dns_server",
@@ -9536,6 +9543,8 @@ var FORKOP_MASK_AFTER_TOKEN_SPACE = [
   "option ipaddr",
   "option netmask",
   "option gateway",
+  "option macaddr",
+  "option ula_prefix",
   "option username",
   "option password",
   "option private_key",
@@ -9633,7 +9642,7 @@ function maskGlobalCheckText(text = "") {
       return maskMultilineContinuation(line);
     }
     const maskedLine = maskGlobalCheckLine(line);
-    if (line.includes("option outbound_json")) {
+    if (maskedLine !== line) {
       const firstQuote = line.indexOf("'");
       if (firstQuote >= 0 && line.slice(firstQuote + 1).indexOf("'") < 0) {
         inMaskedMultiline = true;

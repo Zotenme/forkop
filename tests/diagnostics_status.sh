@@ -81,10 +81,21 @@ config settings 'main'
         option proxy_string 'vless://secret@example.com:443'
 config subscription_url 'sub1'
         option url 'https://user:password@example.com/subscription?token=secret'
+config section 'bypass'
+        option domain 'private-one.example
+private-two.example'
+        option ip_cidr '203.0.113.7/32'
+        option domain_suffix_text 'legacy-private.example'
+        option action 'bypass'
 EOF
 masked_output="$(status_ucode forkop-config-masked "$masked_config")"
 case "$masked_output" in
   *device-secret*|*vless://secret*|*token=secret*|*user:password*) fail "masked Forkop config leaked a secret" ;;
+  *private-one*|*private-two*|*203.0.113.7*|*legacy-private*) fail "masked Forkop config leaked text rule values" ;;
+esac
+case "$masked_output" in
+  *"option domain 'MASKED'"*"option action 'bypass'"*) ;;
+  *) fail "masked Forkop config must mask multi-line text rules and keep following options" ;;
 esac
 case "$masked_output" in
   *"option hwid 'MASKED'"*) ;;
@@ -101,12 +112,14 @@ config interface 'wan'
         option proto 'wireguard'
         option private_key 'wireguard-private-secret'
         option addresses '192.0.2.2/32'
+        option macaddr '02:00:00:00:00:01'
 config interface 'lan'
         option private_key 'not-in-wan'
 EOF
 wan_output="$(status_ucode wan-config-masked "$wan_wireguard")"
 case "$wan_output" in
   *wireguard-private-secret*) fail "masked WAN config leaked the WireGuard private key" ;;
+  *02:00:00:00:00:01*) fail "masked WAN config leaked the MAC address" ;;
 esac
 case "$wan_output" in
   *"option private_key '******'"*) ;;

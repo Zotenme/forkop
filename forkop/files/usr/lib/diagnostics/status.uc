@@ -294,6 +294,9 @@ function wan_config_masked(path) {
             fields[1] == "private_key") {
             print("        option private_key '******'\n");
         }
+        else if (length(fields) >= 2 && fields[0] == "option" && fields[1] == "macaddr") {
+            print("        option macaddr '******'\n");
+        }
         else {
             print(line, "\n");
         }
@@ -348,6 +351,16 @@ function mask_option_path(line, token) {
     return substr(line, 0, slash) + "/MASKED'" + substr(line, quote + 1);
 }
 
+const MASKED_RULE_OPTIONS = [
+    "domain",
+    "domain_suffix",
+    "domain_keyword",
+    "domain_regex",
+    "ip_cidr",
+    "source_ip_cidr",
+    "fully_routed_ips"
+];
+
 function forkop_config_masked_line(line) {
     line = mask_after_token(line, "option proxy_string");
     line = mask_after_token(line, "option hwid");
@@ -356,13 +369,11 @@ function forkop_config_masked_line(line) {
     line = mask_after_token(line, "list urltest_proxy_links");
     line = mask_after_token(line, "list selector_proxy_links");
     line = mask_after_token_space(line, "option outbound_json");
-    line = mask_after_token_space(line, "list domain");
-    line = mask_after_token_space(line, "list domain_suffix");
-    line = mask_after_token_space(line, "list domain_keyword");
-    line = mask_after_token_space(line, "list domain_regex");
-    line = mask_after_token_space(line, "list ip_cidr");
-    line = mask_after_token_space(line, "list source_ip_cidr");
-    line = mask_after_token_space(line, "list fully_routed_ips");
+    for (let key in MASKED_RULE_OPTIONS) {
+        line = mask_after_token_space(line, "option " + key);
+        line = mask_after_token_space(line, "option " + key + "_text");
+        line = mask_after_token_space(line, "list " + key);
+    }
     line = mask_after_token(line, "list server_users");
     line = mask_after_token_space(line, "option dns_server");
     line = mask_after_token_space(line, "option bootstrap_dns_server");
@@ -428,7 +439,8 @@ function forkop_config_masked(path) {
 
         let masked = forkop_config_masked_line(line);
         print(masked, "\n");
-        if (index(line, "option outbound_json") >= 0) {
+        // Text values (outbound_json, domain lists) may continue on the next lines.
+        if (masked != line) {
             let first_quote = index(line, "'");
             if (first_quote >= 0 && index(substr(line, first_quote + 1), "'") < 0)
                 in_masked_multiline = true;
