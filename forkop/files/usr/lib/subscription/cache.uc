@@ -88,19 +88,6 @@ function file_first_line_value(path) {
     return newline >= 0 ? substr(data, 0, newline) : data;
 }
 
-function file_has_exact_line(path, needle) {
-    let data = fs.readfile(path);
-    if (data == null)
-        return false;
-
-    needle = as_string(needle);
-    for (let line in split(data, "\n"))
-        if (as_string(line) == needle)
-            return true;
-
-    return false;
-}
-
 function whitespace_values(value) {
     let result = [];
     for (let item in split(trim(as_string(value)), /[ \t\r\n]+/))
@@ -1113,16 +1100,6 @@ function save_cache(cache_dir, section, format_version, cache) {
         fs.unlink(tmp_path);
         exit(1);
     }
-}
-
-function write_outbound_metadata(cache_dir, format_version, section, names_path, countries_path, servers_path) {
-    let cache = load_cache(cache_dir, section);
-    cache.outboundMetadata = {
-        names: object_or_empty(read_json(names_path)),
-        countries: object_or_empty(read_json(countries_path))
-    };
-    cache.servers = object_or_empty(read_json(servers_path));
-    save_cache(cache_dir, section, format_version, cache);
 }
 
 function metadata_array_from_file(metadata_path) {
@@ -2438,9 +2415,6 @@ let mode = ARGV[0] || "";
 if (mode == "file-first-line") {
     file_first_line(ARGV[1]);
 }
-else if (mode == "file-has-exact-line") {
-    exit(file_has_exact_line(ARGV[1], ARGV[2]) ? 0 : 1);
-}
 else if (mode == "state-list-contains") {
     exit(state_list_contains(ARGV[1], ARGV[2]) ? 0 : 1);
 }
@@ -2471,9 +2445,6 @@ else if (mode == "prepared-runtime-cache-should-skip-fixture") {
 else if (mode == "ensure-runtime-dirs") {
     ensure_runtime_dirs();
 }
-else if (mode == "clear-runtime-cache") {
-    clear_subscription_runtime_cache();
-}
 else if (mode == "ensure-runtime-cache-format") {
     ensure_runtime_cache_format();
 }
@@ -2487,11 +2458,6 @@ else if (mode == "stale-cache-delete-paths-fixture") {
 }
 else if (mode == "section-current-usable-cache") {
     exit(section_current_usable_cache(uci_section(ARGV[1]), ARGV[2], ARGV[3], ARGV[4]) ? 0 : 1);
-}
-else if (mode == "restore-persistent-source") {
-    let expected_hwid = ARGV[7] == null ? "" : ARGV[6];
-    let default_user_agent = ARGV[7] == null ? ARGV[6] : ARGV[7];
-    exit(restore_persistent_subscription_cache(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], expected_hwid, default_user_agent) ? 0 : 1);
 }
 else if (mode == "persist-source-cache") {
     let effective_hwid = ARGV[6] == null ? "" : ARGV[5];
@@ -2510,9 +2476,6 @@ else if (mode == "section-current-usable-cache-fixture") {
         }
     }
     exit(section_current_usable_cache(selected, ARGV[3], ARGV[4], ARGV[5]) ? 0 : 1);
-}
-else if (mode == "user-agent-supported") {
-    exit(user_agent_supported(ARGV[1], ARGV[2]) ? 0 : 1);
 }
 else if (mode == "user-agent-matches-config") {
     exit(user_agent_matches_config(ARGV[1], ARGV[2], ARGV[3]) ? 0 : 1);
@@ -2553,9 +2516,6 @@ else if (mode == "prepare-caches") {
 else if (mode == "run-deferred-bootstrap") {
     run_deferred_subscription_bootstrap(ARGV[1] || "");
 }
-else if (mode == "start-deferred-bootstrap-worker") {
-    start_deferred_subscription_bootstrap_retry_worker(ARGV[1] || "");
-}
 else if (mode == "stop-deferred-bootstrap-worker") {
     stop_deferred_subscription_bootstrap_retry_worker();
 }
@@ -2570,33 +2530,6 @@ else if (mode == "subscription-import-stats") {
 }
 else if (mode == "subscription-source-summary") {
     print(subscription_source_summary(ARGV[1], ARGV[2], ARGV[3], ARGV[4]), "\n");
-}
-else if (mode == "object-has-extra-keys") {
-    exit(object_has_extra_keys(ARGV[1]) ? 0 : 1);
-}
-else if (mode == "write-outbound-metadata") {
-    let cache_dir = ARGV[1], format_version = ARGV[2], section = ARGV[3];
-    if (!safe_section(section))
-        exit(1);
-    write_outbound_metadata(cache_dir, format_version, section, ARGV[4], ARGV[5], ARGV[6]);
-}
-else if (mode == "write-subscription-metadata") {
-    let cache_dir = ARGV[1], format_version = ARGV[2], section = ARGV[3];
-    if (!safe_section(section))
-        exit(1);
-    write_subscription_metadata(cache_dir, format_version, section, ARGV[4]);
-}
-else if (mode == "append-metadata-file") {
-    append_metadata_file(ARGV[1], ARGV[2], ARGV[3], ARGV[4]);
-}
-else if (mode == "append-cached-metadata") {
-    append_cached_metadata(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6]);
-}
-else if (mode == "write-source-metadata") {
-    let cache_dir = ARGV[1], format_version = ARGV[2], section = ARGV[3];
-    if (!safe_section(section))
-        exit(1);
-    write_source_metadata(cache_dir, format_version, section, ARGV[4], ARGV[5], ARGV[6], ARGV[7]);
 }
 else if (mode == "get-outbound-metadata") {
     let cache_dir = ARGV[1], section = ARGV[2];
