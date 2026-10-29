@@ -108,6 +108,60 @@ fi
 grep -Fq 'reason=pending' "$pending_file" ||
   fail "pending reload should preserve pending reason while delayed by active action"
 
+lock_bin="$WORK_DIR/lock-bin"
+lock_dir="$WORK_DIR/reload.lock"
+mkdir -p "$lock_bin"
+cat >"$lock_bin/mkdir" <<MKDIR
+#!/usr/bin/env bash
+"$(command -v mkdir)" "\$@" || exit \$?
+[ "\$1" != "$lock_dir" ] || "$(command -v mkdir)" "\$1/pid"
+MKDIR
+chmod 0755 "$lock_bin/mkdir"
+
+reload_with_unwritable_lock_owner() {
+  local status=0
+  rm -f "$pending_file"
+  PATH="$lock_bin:$PATH" \
+    FORKOP_RELOAD_LOCK_DIR="$lock_dir" \
+    FORKOP_PENDING_RELOAD_FILE="$pending_file" \
+    FORKOP_INTERNAL_CONFIG_TRIGGER_GUARD="$WORK_DIR/internal-guard" \
+    initd_ucode reload-begin-fixture manual 123 1 1 "" >"$WORK_DIR/reload.out" 2>&1 || status=$?
+  [ "$status" = 1 ] ||
+    fail "$1: reload must be skipped when the lock owner cannot be written, got status $status: $(cat "$WORK_DIR/reload.out")"
+  grep -Fxq "INITD_RELOAD_ACTION='skip'" "$WORK_DIR/reload.out" ||
+    fail "$1: expected skipped reload, got: $(cat "$WORK_DIR/reload.out")"
+  grep -Fq 'reason=manual' "$pending_file" ||
+    fail "$1: busy reload should stay pending"
+}
+
+rm -rf "$lock_dir"
+reload_with_unwritable_lock_owner "new reload lock"
+
+rm -rf "$lock_dir"
+"$(command -v mkdir)" "$lock_dir"
+printf '%s\n' 999999 >"$lock_dir/pid"
+reload_with_unwritable_lock_owner "stale reload lock"
+rm -rf "$lock_dir"
+
+ui_stub_lib="$WORK_DIR/ui-stub-lib"
+mkdir -p "$ui_stub_lib/service"
+cat >"$ui_stub_lib/service/ui.uc" <<'UI'
+let fs = require("fs");
+if (ARGV[0] == "service-action-begin-if-idle")
+    print("job-1\n");
+else if (ARGV[0] == "service-action-update-pid")
+    fs.writefile(getenv("UI_STUB_LOG"), ARGV[1] + " " + ARGV[2] + "\n");
+UI
+begin_status=0
+begin_output="$(UI_STUB_LOG="$WORK_DIR/ui-stub.log" FORKOP_LIB="$ui_stub_lib" \
+  ucode -L "$ROOT_DIR/forkop/files/usr/lib" "$INITD_UC" begin-action reload manual "" 2>&1)" || begin_status=$?
+[ "$begin_status" = 0 ] ||
+  fail "service action without owner pid must start, got status $begin_status: $begin_output"
+[ "$begin_output" = job-1 ] ||
+  fail "service action without owner pid should print job id, got: $begin_output"
+grep -Eq '^job-1 [0-9]+$' "$WORK_DIR/ui-stub.log" ||
+  fail "service action without owner pid should record the parent pid, got: $(cat "$WORK_DIR/ui-stub.log" 2>/dev/null)"
+
 start_retry_file="$WORK_DIR/start.retry"
 if initd_ucode start-retry-pending "$start_retry_file" >/dev/null 2>&1; then
   fail "missing start retry marker should not be pending"
