@@ -315,10 +315,6 @@ function write_json_file(path, value) {
     return fs.writefile(path, sprintf("%J", value) + "\n");
 }
 
-function write_json(value) {
-    print(sprintf("%J", value), "\n");
-}
-
 function canonical_runtime_value(value) {
     if (type(value) == "array") {
         let result = [];
@@ -435,22 +431,6 @@ function urldecode_fragment(value) {
     let decoded = urldecode(value);
     fragment_decode_cache[value] = decoded;
     return decoded;
-}
-
-function subscription_url_fragment(url) {
-    url = as_string(url);
-    let marker = index(url, "#");
-    if (marker < 0) {
-        print("\n");
-        return true;
-    }
-
-    let fragment = substr(url, marker + 1);
-    if (index(fragment, "%") >= 0 || index(fragment, "+") >= 0)
-        print(urldecode_fragment(fragment));
-    else
-        print(fragment, "\n");
-    return true;
 }
 
 function parse_query(query) {
@@ -1095,18 +1075,6 @@ function parse_share_link(line) {
     return null;
 }
 
-function share_link_outbound(raw, tag) {
-    let outbound = parse_share_link(raw);
-    if (type(outbound) != "object")
-        return false;
-
-    outbound.tag = as_string(tag);
-    delete outbound.share_link;
-    delete outbound.remark;
-    write_json(outbound);
-    return true;
-}
-
 function clean_scalar(value) {
     value = trim(value);
     let first = substr(value, 0, 1);
@@ -1579,17 +1547,6 @@ function metadata_new_store() {
     };
 }
 
-function write_metadata_compact_json(store) {
-    print("{");
-    for (let i = 0; i < length(store.order); i++) {
-        let key = store.order[i];
-        if (i > 0)
-            print(",");
-        print(sprintf("%J", key), ":", sprintf("%J", store.values[key]));
-    }
-    print("}\n");
-}
-
 function add_metadata_entry(store, key, value) {
     key = lc(trim(key));
     value = replace(trim(value), /\r/g, "");
@@ -1622,11 +1579,6 @@ function metadata_headers_store(input_file) {
     }
 
     return store;
-}
-
-function metadata_headers_json(input_file) {
-    write_metadata_compact_json(metadata_headers_store(input_file));
-    return true;
 }
 
 function metadata_body_store_from_data(data) {
@@ -1672,11 +1624,6 @@ function metadata_body_store_with_base64_fallback(input_file) {
         return store;
 
     return metadata_body_store_from_data(decoded);
-}
-
-function metadata_body_json(input_file) {
-    write_metadata_compact_json(metadata_body_store(input_file));
-    return true;
 }
 
 function metadata_trim_text(value) {
@@ -1868,25 +1815,6 @@ function metadata_ui_object(raw) {
         result.fileName = file_name;
 
     return result;
-}
-
-function metadata_ui_json(raw_path) {
-    let result = metadata_ui_object(read_json_file(raw_path));
-    if (length(keys(result)) > 1)
-        write_json(result);
-    return true;
-}
-
-function metadata_extract_ui_json(headers_file, body_file) {
-    let raw = metadata_body_store_with_base64_fallback(body_file).values;
-    let headers = metadata_headers_store(headers_file).values;
-    for (let key, value in headers)
-        raw[key] = value;
-
-    let result = metadata_ui_object(raw);
-    if (length(keys(result)) > 1)
-        write_json(result);
-    return true;
 }
 
 function is_metadata_preamble_line(line) {
@@ -2884,14 +2812,6 @@ function normalize_content_validated(input_file, output_file) {
     return validate_subscription(output_file);
 }
 
-function normalized_skipped_warning(path) {
-    let message = normalized_skipped_message(path);
-    if (message != "")
-        print(message, "\n");
-
-    return true;
-}
-
 function subscription_source_entry_result(valid, url, user_agent, error) {
     return {
         valid,
@@ -2951,10 +2871,6 @@ let ok = false;
 
 if (mode == "validate-subscription")
     ok = validate_subscription(ARGV[1]);
-else if (mode == "url-fragment")
-    ok = subscription_url_fragment(ARGV[1]);
-else if (mode == "share-link-outbound")
-    ok = share_link_outbound(ARGV[1], ARGV[2]);
 else if (mode == "normalize-uri-list")
     ok = normalize_uri_list(ARGV[1], ARGV[2]);
 else if (mode == "normalize-clash-yaml")
@@ -2965,40 +2881,17 @@ else if (mode == "normalize-content-validated")
     ok = normalize_content_validated(ARGV[1], ARGV[2]);
 else if (mode == "try-decode-gzip-content")
     ok = try_decode_gzip_content_file(ARGV[1]);
-else if (mode == "runtime-outbounds-equal")
-    ok = runtime_outbounds_equal(ARGV[1], ARGV[2]);
-else if (mode == "normalized-skipped-warning")
-    ok = normalized_skipped_warning(ARGV[1]);
-else if (mode == "metadata-headers-json")
-    ok = metadata_headers_json(ARGV[1]);
-else if (mode == "metadata-body-json")
-    ok = metadata_body_json(ARGV[1]);
-else if (mode == "metadata-ui-json")
-    ok = metadata_ui_json(ARGV[1]);
-else if (mode == "metadata-extract-ui-json")
-    ok = metadata_extract_ui_json(ARGV[1], ARGV[2]);
-else if (mode == "metadata-extract-ui-file")
-    ok = extract_ui_metadata_file(ARGV[1], ARGV[2], ARGV[3]);
 else if (mode == "parse-source-entry-tsv")
     ok = parse_subscription_source_entry_tsv(ARGV[1]);
 else if (ARGV[0] && ARGV[1])
     ok = normalize_uri_list(ARGV[0], ARGV[1]);
 else {
     warn("Usage: subscription/parser.uc validate-subscription <normalized-json>\n");
-    warn("       subscription/parser.uc url-fragment <url>\n");
-    warn("       subscription/parser.uc share-link-outbound <url> <tag>\n");
     warn("       subscription/parser.uc normalize-uri-list <input> <output>\n");
     warn("       subscription/parser.uc normalize-clash-yaml <input> <output>\n");
     warn("       subscription/parser.uc normalize-content <input> <output>\n");
     warn("       subscription/parser.uc normalize-content-validated <input> <output>\n");
     warn("       subscription/parser.uc try-decode-gzip-content <input>\n");
-    warn("       subscription/parser.uc runtime-outbounds-equal <left> <right>\n");
-    warn("       subscription/parser.uc normalized-skipped-warning <normalized-json>\n");
-    warn("       subscription/parser.uc metadata-headers-json <input>\n");
-    warn("       subscription/parser.uc metadata-body-json <input>\n");
-    warn("       subscription/parser.uc metadata-ui-json <raw-json>\n");
-    warn("       subscription/parser.uc metadata-extract-ui-json <headers> <body>\n");
-    warn("       subscription/parser.uc metadata-extract-ui-file <headers> <body> <output>\n");
     warn("       subscription/parser.uc parse-source-entry-tsv <entry>\n");
     exit(2);
 }
