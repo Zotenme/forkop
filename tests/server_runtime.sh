@@ -43,6 +43,10 @@ case "$*" in
   "generate reality-keypair")
     printf 'PrivateKey: private-key\nPublicKey: public-key\n'
     ;;
+  "generate tls-keypair "*)
+    printf '%s\n' '-----BEGIN PRIVATE KEY-----' 'generated-key' '-----END PRIVATE KEY-----'
+    printf '%s\n' '-----BEGIN CERTIFICATE-----' 'generated-certificate' '-----END CERTIFICATE-----'
+    ;;
   *)
     printf 'unsupported sing-box command: %s\n' "$*" >&2
     exit 2
@@ -134,5 +138,36 @@ grep -Fxq 'commit forkop' "$LOG" || fail 'expected config commit'
 : >"$LOG"
 ucode -L "$UCODE_LIB" "$SERVER_RUNTIME" prepare-all-defaults
 [ ! -s "$LOG" ] || fail 'unchanged MTProto defaults must not rewrite or commit configuration on every reload'
+
+CERTS_DIR="$WORK_DIR/server-certs"
+export FORKOP_SERVER_CERTS_DIR="$CERTS_DIR"
+mkdir -p "$WORK_DIR/custom"
+
+cat >"$STATE" <<EOF_STATE
+forkop.tls_auto=server
+forkop.tls_auto.protocol=vless
+forkop.tls_auto.security=tls
+forkop.tls_partial=server
+forkop.tls_partial.protocol=trojan
+forkop.tls_partial.security=tls
+forkop.tls_partial.tls_certificate_path=$WORK_DIR/custom/edge.crt
+EOF_STATE
+: >"$LOG"
+
+ucode -L "$UCODE_LIB" "$SERVER_RUNTIME" prepare-all-defaults ||
+  fail 'TLS servers without certificate or key paths must get default paths'
+
+assert_value forkop.tls_auto.tls_server_name www.microsoft.com
+assert_value forkop.tls_auto.tls_certificate_path "$CERTS_DIR/tls_auto.crt"
+assert_value forkop.tls_auto.tls_key_path "$CERTS_DIR/tls_auto.key"
+assert_value forkop.tls_partial.tls_certificate_path "$WORK_DIR/custom/edge.crt"
+assert_value forkop.tls_partial.tls_key_path "$CERTS_DIR/tls_partial.key"
+
+grep -Fxq 'generated-certificate' "$CERTS_DIR/tls_auto.crt" || fail 'expected generated TLS certificate'
+grep -Fxq 'generated-key' "$CERTS_DIR/tls_auto.key" || fail 'expected generated TLS key'
+[ "$(stat -c %a "$CERTS_DIR/tls_auto.key")" = 600 ] || fail 'generated TLS key must be private'
+grep -Fxq 'generated-certificate' "$WORK_DIR/custom/edge.crt" || fail 'expected TLS certificate at the configured path'
+grep -Fxq 'generated-key' "$CERTS_DIR/tls_partial.key" || fail 'expected generated TLS key for partial paths'
+[ ! -e "$CERTS_DIR/tls_partial.crt" ] || fail 'configured TLS certificate path must be kept'
 
 printf 'server runtime checks passed\n'

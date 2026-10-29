@@ -5,6 +5,7 @@ let core_ip = require("core.ip");
 let uci = require("core.uci");
 
 const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
+const SERVER_CERTS_DIR = getenv("FORKOP_SERVER_CERTS_DIR") || "/etc/forkop/server-certs";
 
 function as_string(value) {
     return value == null ? "" : "" + value;
@@ -506,6 +507,16 @@ function server_prepare_legacy_user_defaults(section, protocol) {
         server_default_set_option(section, "vless_flow", extra);
 }
 
+function safe_filename_string(value) {
+    value = as_string(value);
+    let result = [];
+    for (let i = 0; i < length(value); i++) {
+        let chr = substr(value, i, 1);
+        push(result, regex_matches(chr, "^[A-Za-z0-9_.-]$") ? chr : "_");
+    }
+    return join("", result);
+}
+
 function server_prepare_tls_defaults(section, protocol, security) {
     if (security != "tls")
         return;
@@ -521,11 +532,10 @@ function server_prepare_tls_defaults(section, protocol, security) {
     let key_path = config_get(section, "tls_key_path", "");
     if (certificate_path == "" || key_path == "") {
         let safe_name = safe_filename_string(section);
-        let default_dir = "/etc/forkop/server-certs";
         if (certificate_path == "")
-            certificate_path = default_dir + "/" + safe_name + ".crt";
+            certificate_path = SERVER_CERTS_DIR + "/" + safe_name + ".crt";
         if (key_path == "")
-            key_path = default_dir + "/" + safe_name + ".key";
+            key_path = SERVER_CERTS_DIR + "/" + safe_name + ".key";
         server_set_option(section, "tls_certificate_path", certificate_path);
         server_set_option(section, "tls_key_path", key_path);
     }
@@ -542,16 +552,6 @@ function server_prepare_tls_defaults(section, protocol, security) {
         if (!server_generate_tls_keypair_files(tls_server_name, certificate_path, key_path))
             fatal("Failed to generate TLS certificate for server '" + section + "'. Aborted.");
     }
-}
-
-function safe_filename_string(value) {
-    value = as_string(value);
-    let result = [];
-    for (let i = 0; i < length(value); i++) {
-        let chr = substr(value, i, 1);
-        push(result, regex_matches(chr, "^[A-Za-z0-9_.-]$") ? chr : "_");
-    }
-    return join("", result);
 }
 
 function prepare_server_defaults(section) {
