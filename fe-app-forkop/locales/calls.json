@@ -4344,8 +4344,8 @@
     ]
   },
   {
-    "call": "Sing-box version is compatible (newer than 1.12.4)",
-    "key": "Sing-box version is compatible (newer than 1.12.4)",
+    "call": "Sing-box version is compatible (1.14.0 or newer)",
+    "key": "Sing-box version is compatible (1.14.0 or newer)",
     "places": [
       "src/forkop/tabs/diagnostic/checks/runSingBoxCheck.ts:67"
     ]

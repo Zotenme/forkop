@@ -1805,8 +1805,8 @@ msgstr "Процесс sing-box запущен"
 msgid "Sing-box service exist"
 msgstr "Сервис sing-box существует"
 
-msgid "Sing-box version is compatible (newer than 1.12.4)"
-msgstr "Версия Sing-box совместима (новее 1.12.4)"
+msgid "Sing-box version is compatible (1.14.0 or newer)"
+msgstr "Версия Sing-box совместима (1.14.0 или новее)"
 
 msgid "Sort by latency"
 msgstr "Сортировать по задержке"

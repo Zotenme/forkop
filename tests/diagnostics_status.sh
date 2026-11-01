@@ -326,4 +326,39 @@ owners="$(printf '%s\n' "$netstat_owners" |
 [ "$owners" = "111/nginx 222/dnsmasq" ] ||
   fail "unexpected conflict owners: $owners"
 
+assert_sing_box_version_ok() {
+  local version="$1"
+  local expected="$2"
+  local version_bin="$WORK_DIR/sing-box-version-bin"
+  local json
+
+  mkdir -p "$version_bin"
+  cat >"$version_bin/sing-box" <<SH
+#!/bin/sh
+printf 'sing-box version %s\nEnvironment: test\n' "$version"
+SH
+  chmod +x "$version_bin/sing-box"
+  json="$(
+    PATH="$version_bin:$PATH" \
+    SB_VARIANT_STATE_FILE="$WORK_DIR/missing-variant" \
+    SB_VERSION_STATE_FILE="$WORK_DIR/missing-version" \
+    FORKOP_LIB="$FORKOP_LIB" \
+      ucode -L "$FORKOP_LIB" "$DIAGNOSTICS_RUNTIME" check-sing-box
+  )"
+  JSON_VALUE="$json" node - "$version" "$expected" <<'NODE'
+const [version, expected] = process.argv.slice(2);
+const value = JSON.parse(process.env.JSON_VALUE);
+if (value.sing_box_version_ok !== Number(expected)) {
+  console.error(`sing-box ${version}: expected sing_box_version_ok=${expected}, got ${value.sing_box_version_ok}`);
+  process.exit(1);
+}
+NODE
+}
+
+# Forkop requires sing-box-extended 1.14+, so 1.12/1.13 cores must not pass.
+assert_sing_box_version_ok "1.12.4-extended" 0
+assert_sing_box_version_ok "1.13.9-extended" 0
+assert_sing_box_version_ok "1.14.0-extended" 1
+assert_sing_box_version_ok "1.14.4-extended" 1
+
 printf 'diagnostics status checks passed\n'

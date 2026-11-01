@@ -2601,7 +2601,7 @@ msgid "Sing-box service exist"
 msgstr ""
 
 #: src/forkop/tabs/diagnostic/checks/runSingBoxCheck.ts:67
-msgid "Sing-box version is compatible (newer than 1.12.4)"
+msgid "Sing-box version is compatible (1.14.0 or newer)"
 msgstr ""
 
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7555

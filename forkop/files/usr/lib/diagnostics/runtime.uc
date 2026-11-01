@@ -1474,7 +1474,7 @@ function check_sing_box() {
         if (version != "") {
             if (sing_box_marker_is("extended-compressed") || module_success(SINGBOX_RUNTIME_UC, [ "is-extended", version ]))
                 sing_box_extended = 1;
-            if (module_success(HELPERS_UC, [ "version-at-least", version, "1.12.4" ]))
+            if (module_success(HELPERS_UC, [ "version-at-least", version, "1.14.0" ]))
                 sing_box_version_ok = 1;
         }
         else if (sing_box_marker_is("extended-compressed"))
