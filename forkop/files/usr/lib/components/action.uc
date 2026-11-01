@@ -1324,44 +1324,6 @@ function restore_sing_box_after_failed_extended_package_install(previous_variant
     return restore_status;
 }
 
-function restore_sing_box_after_failed_package_install(target_package, previous_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, cronet_touched) {
-    pkg_remove_sing_box_conflict(target_package);
-    let restore_status = restore_sing_box_install_backup(previous_variant, backup_binary);
-    if (cronet_touched) {
-        if (!restore_file_backup("/usr/lib/libcronet.so", backup_cronet))
-            restore_status = false;
-        if (file_nonempty("/usr/lib/libcronet.so") && !command_success_from_args([ "chmod", "0644", "/usr/lib/libcronet.so" ]))
-            restore_status = false;
-    }
-    restore_sing_box_variant_state(previous_marker, previous_version_state);
-    if (!restore_sing_box_service_from_marker(previous_marker))
-        restore_status = false;
-    if (restore_status) {
-        remove_file(backup_binary);
-        remove_file(backup_cronet);
-    }
-    clear_version_caches();
-    return restore_status;
-}
-
-function fail_package_sing_box_install(action, tiny, reason, current_version, latest_version,
-    target_package, previous_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, cronet_touched) {
-    let restored = restore_sing_box_after_failed_package_install(
-        target_package,
-        previous_variant,
-        backup_binary,
-        backup_cronet,
-        previous_marker,
-        previous_version_state,
-        cronet_touched
-    );
-
-    let prefix = tiny ? "sing-box-tiny" : "Stable sing-box";
-    if (restored)
-        action_fail("sing_box", action, prefix + " " + reason + "; previous sing-box variant was restored", current_version, latest_version);
-    action_fail("sing_box", action, prefix + " " + reason + " and previous sing-box variant could not be restored", current_version, latest_version);
-}
-
 function install_sing_box_extended_package(action) {
     init_tmp_dir() || action_fail("sing_box", action, "Failed to create temporary directory");
     let current_version = sing_box_runtime_output("version", []);
@@ -1374,8 +1336,11 @@ function install_sing_box_extended_package(action) {
     let latest_version = normalize_sing_box_version(release.tag);
 
     if (action == "check_update") {
-        if (!sing_box_runtime_success("is-extended", [ current_version ]))
-            action_fail("sing_box", action, "sing-box-extended is not installed", current_version, latest_version);
+        // Forkop runs only on sing-box-extended, so any other build is offered the switch.
+        if (!sing_box_runtime_success("is-extended", [ current_version ])) {
+            updates_log("sing_box update is available: " + current_version + " -> sing-box-extended " + latest_version);
+            action_success("sing_box", action, "sing-box-extended is required", current_version, latest_version, 0, "outdated", release.release_url);
+        }
         check_success("sing_box", normalize_sing_box_version(current_version), normalize_sing_box_version(latest_version), release.release_url);
     }
 
@@ -1631,85 +1596,6 @@ function install_sing_box_extended(action, compressed) {
     action_success("sing_box", action, label + " has been installed", new_version, latest_version, 1, "latest", release.release_url);
 }
 
-function install_package_sing_box(action, tiny) {
-    let package_name = tiny ? "sing-box-tiny" : "sing-box";
-    let conflict = tiny ? "sing-box" : "sing-box-tiny";
-    let label = tiny ? "tiny sing-box" : "stable sing-box";
-    let package_version = installed_package_version(package_name);
-    let binary_version = sing_box_runtime_output("version", []);
-    let current_version = package_version;
-    if (sing_box_runtime_success("is-extended", [ binary_version ]))
-        current_version = binary_version;
-    if (current_version == "")
-        current_version = binary_version;
-    let latest_version = available_package_version(package_name);
-    if (latest_version == "")
-        latest_version = installed_package_version(package_name);
-
-    if (action == "check_update") {
-        if (latest_version == "")
-            action_fail("sing_box", action, "Failed to resolve " + (tiny ? "tiny" : "stable") + " sing-box package version", current_version);
-        if (tiny && !sing_box_runtime_success("is-tiny", [ binary_version ]))
-            action_fail("sing_box", action, "sing-box-tiny is not installed", current_version, latest_version);
-        check_success("sing_box", current_version, latest_version, "");
-    }
-
-    if (!run_logged("Updating package lists before " + package_name + " installation", pkg_list_update_command()))
-        action_fail("sing_box", action, "Failed to update package lists", current_version, latest_version);
-    latest_version = available_package_version(package_name);
-    if (latest_version == "")
-        latest_version = installed_package_version(package_name);
-    if (latest_version == "")
-        action_fail("sing_box", action, "Failed to resolve " + (tiny ? "tiny" : "stable") + " sing-box package version", current_version);
-
-    let previous_variant = sing_box_runtime_output("variant", []);
-    let previous_marker = sing_box_runtime_output("read-variant-marker", []);
-    let previous_version_state = sing_box_runtime_output("read-version-state", []);
-    stop_forkop_before_sing_box_change();
-
-    let backup_binary = "";
-    let backup_cronet = "";
-    let cronet_touched = false;
-    let backup_on_tmpfs = previous_variant == "extended-compressed";
-    if (file_exists("/usr/bin/sing-box")) {
-        backup_binary = backup_on_tmpfs ? tmp_dir + "/sing-box.forkop-backup" :
-            "/usr/bin/sing-box.forkop-backup." + owner_pid();
-        if (!move_file_to_backup("/usr/bin/sing-box", backup_binary))
-            action_fail("sing_box", action, "Failed to backup current sing-box binary", current_version, latest_version);
-    }
-    if (file_exists("/usr/lib/libcronet.so")) {
-        cronet_touched = true;
-        backup_cronet = backup_on_tmpfs ? tmp_dir + "/libcronet.so.forkop-backup" :
-            "/usr/lib/libcronet.so.forkop-backup." + owner_pid();
-        if (!move_file_to_backup("/usr/lib/libcronet.so", backup_cronet)) {
-            restore_sing_box_backup(backup_binary);
-            action_fail("sing_box", action, "Failed to backup current libcronet.so", current_version, latest_version);
-        }
-    }
-
-    if (!run_logged("Installing " + label + " package", "sh -c " + shell_quote("exit 0")) ||
-        !replace_sing_box_package_variant(package_name, conflict, latest_version))
-        fail_package_sing_box_install(action, tiny, "package installation failed", current_version, latest_version,
-            package_name, previous_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, cronet_touched);
-
-    let new_version = read_sing_box_binary_version("/usr/bin/sing-box", "");
-    if (new_version == "")
-        fail_package_sing_box_install(action, tiny, "package was installed, but sing-box binary is not available", current_version, latest_version,
-            package_name, previous_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, cronet_touched);
-    if (sing_box_runtime_success("is-extended", [ new_version ]))
-        fail_package_sing_box_install(action, tiny, "package was installed, but the active binary is still sing-box-extended", new_version, latest_version,
-            package_name, previous_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, cronet_touched);
-    write_sing_box_variant_state(tiny ? "tiny" : "stable", new_version);
-    restart_forkop_after_successful_change();
-    if (!wait_forkop_running_after_sing_box_change())
-        fail_package_sing_box_install(action, tiny, "was installed, but Forkop did not start cleanly", new_version, latest_version,
-            package_name, previous_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, cronet_touched);
-    remove_file(backup_binary);
-    remove_file(backup_cronet);
-    clear_version_caches();
-    action_success("sing_box", action, label + " has been installed", new_version, latest_version, new_version == current_version ? 0 : 1, "latest");
-}
-
 function check_forkop() {
     let metadata = fetch_forkop_latest_release_metadata();
     let fields = split(metadata, "\t");
@@ -1817,24 +1703,10 @@ function dispatch_sing_box(action) {
         install_sing_box_extended(action, true);
         return;
     }
-    if (action == "install_tiny") {
-        install_package_sing_box(action, true);
-        return;
-    }
-    if (action == "install_stable") {
-        install_package_sing_box(action, false);
-        return;
-    }
 
+    // A build from OpenWrt feeds is replaced with the sing-box-extended package.
     let variant = sing_box_runtime_output("variant", []);
-    if (variant == "extended-compressed")
-        install_sing_box_extended(action, true);
-    else if (variant == "extended")
-        install_sing_box_extended(action, false);
-    else if (variant == "tiny")
-        install_package_sing_box(action, true);
-    else
-        install_package_sing_box(action, false);
+    install_sing_box_extended(action, variant == "extended-compressed");
 }
 
 function normalize_component_name(component) {
@@ -1860,8 +1732,7 @@ function component_action(component, action) {
     else if (component == "forkop" && action == "install")
         install_forkop();
     else if (component == "sing_box" && (action == "check_update" || action == "install" ||
-        action == "install_extended" || action == "install_extended_compressed" ||
-        action == "install_tiny" || action == "install_stable"))
+        action == "install_extended" || action == "install_extended_compressed"))
         dispatch_sing_box(action);
     else if (component == "zapret" && (action == "check_update" || action == "install"))
         install_zapret(action);

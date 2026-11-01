@@ -558,9 +558,7 @@ export namespace Forkop {
     | 'install'
     | 'remove'
     | 'install_extended'
-    | 'install_extended_compressed'
-    | 'install_tiny'
-    | 'install_stable';
+    | 'install_extended_compressed';
 
   export interface ComponentActionResult {
     success: boolean;

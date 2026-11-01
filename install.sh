@@ -60,9 +60,8 @@ Installs or updates Forkop packages:
   - luci-app-forkop
   - luci-i18n-forkop-ru when requested or when LuCI language is Russian
 
-Can also install or switch sing-box variant:
-  - stable sing-box from OpenWrt feeds
-  - sing-box-extended from GitHub OpenWrt packages (for xHTTP support)
+Also installs sing-box-extended from GitHub OpenWrt packages, which Forkop
+requires; a sing-box package from OpenWrt feeds is replaced with it.
 EOF
 }
 
@@ -1608,10 +1607,9 @@ installer_text() {
             i18n_prompt) printf '%s\n' "Установить русский пакет интерфейса?" ;;
             i18n_skip) printf '%s\n' "Продолжаю без русского пакета интерфейса." ;;
             luci_ru) printf '%s\n' "Русский пакет интерфейса будет установлен автоматически." ;;
-            sing_box_prompt) printf '%s\n' "Какую сборку singbox ставить?" ;;
-            sing_box_stable) printf '%s\n' "singbox stable" ;;
-            sing_box_extended) printf '%s\n' "singbox extended (если нужен xhttp)" ;;
-            sing_box_skip_msg) printf '%s\n' "Пропускаю установку sing-box." ;;
+            sing_box_install_msg) printf '%s\n' "Устанавливаю sing-box-extended: Forkop работает только с ним." ;;
+            sing_box_replace_msg) printf '%s\n' "sing-box из пакетов OpenWrt будет заменён на sing-box-extended: Forkop работает только с ним." ;;
+            sing_box_skip_msg) printf '%s\n' "sing-box-extended уже установлен." ;;
             *) printf '%s\n' "$key" ;;
         esac
         return 0
@@ -1626,10 +1624,9 @@ installer_text() {
         i18n_prompt) printf '%s\n' "Install the Russian interface language package?" ;;
         i18n_skip) printf '%s\n' "Continuing without the Russian interface language package." ;;
         luci_ru) printf '%s\n' "The Russian interface package will be installed automatically." ;;
-        sing_box_prompt) printf '%s\n' "Which singbox build should be installed?" ;;
-        sing_box_stable) printf '%s\n' "singbox stable" ;;
-        sing_box_extended) printf '%s\n' "singbox extended (if xhttp is needed)" ;;
-        sing_box_skip_msg) printf '%s\n' "Skipping sing-box installation." ;;
+        sing_box_install_msg) printf '%s\n' "Installing sing-box-extended: Forkop requires it." ;;
+        sing_box_replace_msg) printf '%s\n' "The sing-box package from OpenWrt feeds will be replaced with sing-box-extended: Forkop requires it." ;;
+        sing_box_skip_msg) printf '%s\n' "sing-box-extended is already installed." ;;
         *) printf '%s\n' "$key" ;;
     esac
 }
@@ -1744,10 +1741,13 @@ sing_box_is_present() {
         pkg_is_installed "sing-box-extended"
 }
 
-select_sing_box_installation() {
-    answer=""
-    default_choice=1
+sing_box_extended_is_present() {
+    pkg_is_installed "sing-box-extended" ||
+        { command_exists sing-box && sing-box version 2>/dev/null | grep -Fq extended; }
+}
 
+# Forkop needs sing-box 1.14 or newer, which only sing-box-extended provides.
+select_sing_box_installation() {
     if [ "$FORKOP_LEGACY_DETECTED" -eq 1 ] &&
         [ -r /etc/init.d/sing-box ] &&
         grep -Fq 'managed sing-box service for binary variants' /etc/init.d/sing-box; then
@@ -1756,36 +1756,17 @@ select_sing_box_installation() {
         return 0
     fi
 
-    if sing_box_is_present; then
+    if sing_box_extended_is_present; then
         SING_BOX_INSTALL_VARIANT=""
         return 0
     fi
 
-    if [ ! -t 0 ]; then
-        SING_BOX_INSTALL_VARIANT="stable"
-        msg "$(installer_text sing_box_prompt): $default_choice ($(installer_text sing_box_stable), non-interactive)"
-        return 0
+    SING_BOX_INSTALL_VARIANT="extended"
+    if sing_box_is_present; then
+        msg "$(installer_text sing_box_replace_msg)"
+    else
+        msg "$(installer_text sing_box_install_msg)"
     fi
-
-    while :; do
-        printf '\n%s\n' "$(installer_text sing_box_prompt)"
-        printf '  1) %s\n' "$(installer_text sing_box_stable)"
-        printf '  2) %s\n' "$(installer_text sing_box_extended)"
-        printf '%s [%s]: ' "$(installer_text select)" "$default_choice"
-        read -r answer || return 1
-        [ -n "$answer" ] || answer="$default_choice"
-
-        if [ "$answer" = "1" ]; then
-            SING_BOX_INSTALL_VARIANT="stable"
-            return 0
-        fi
-        if [ "$answer" = "2" ]; then
-            SING_BOX_INSTALL_VARIANT="extended"
-            return 0
-        fi
-
-        warn "$(installer_text invalid_choice)"
-    done
 }
 
 install_selected_sing_box() {
@@ -1796,9 +1777,6 @@ install_selected_sing_box() {
         "")
             msg "$(installer_text sing_box_skip_msg)"
             return 0
-            ;;
-        stable)
-            action="install_stable"
             ;;
         extended)
             action="install_extended"

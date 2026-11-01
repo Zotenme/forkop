@@ -4334,8 +4334,6 @@ var initialDiagnosticStore = {
     singBoxInstall: { loading: false },
     singBoxInstallExtended: { loading: false },
     singBoxInstallExtendedCompressed: { loading: false },
-    singBoxInstallTiny: { loading: false },
-    singBoxInstallStable: { loading: false },
     zapretCheck: { loading: false },
     zapretInstall: { loading: false },
     zapretRemove: { loading: false },
@@ -4687,8 +4685,6 @@ var componentActionKeyMap = {
   "sing_box:install": "singBoxInstall",
   "sing_box:install_extended": "singBoxInstallExtended",
   "sing_box:install_extended_compressed": "singBoxInstallExtendedCompressed",
-  "sing_box:install_tiny": "singBoxInstallTiny",
-  "sing_box:install_stable": "singBoxInstallStable",
   "zapret:check_update": "zapretCheck",
   "zapret:install": "zapretInstall",
   "zapret:remove": "zapretRemove",
@@ -4794,8 +4790,6 @@ function getEmptyUpdatesActions() {
     singBoxInstall: { loading: false },
     singBoxInstallExtended: { loading: false },
     singBoxInstallExtendedCompressed: { loading: false },
-    singBoxInstallTiny: { loading: false },
-    singBoxInstallStable: { loading: false },
     zapretCheck: { loading: false },
     zapretInstall: { loading: false },
     zapretRemove: { loading: false },
@@ -13038,18 +13032,6 @@ function patchSystemInfoAfterMutation(result) {
       nextSystemInfo.sing_box_compressed = 1;
       nextSystemInfo.sing_box_tailscale = 1;
     }
-    if (result.action === "install_stable") {
-      nextSystemInfo.sing_box_extended = 0;
-      nextSystemInfo.sing_box_tiny = 0;
-      nextSystemInfo.sing_box_compressed = 0;
-      nextSystemInfo.sing_box_tailscale = 1;
-    }
-    if (result.action === "install_tiny") {
-      nextSystemInfo.sing_box_extended = 0;
-      nextSystemInfo.sing_box_tiny = 1;
-      nextSystemInfo.sing_box_compressed = 0;
-      nextSystemInfo.sing_box_tailscale = 0;
-    }
   }
   if (result.component === "zapret") {
     nextSystemInfo.providerInfoLoaded = true;
@@ -13389,10 +13371,8 @@ function getComponentCards() {
   const zapret2Installed = Boolean(systemInfo.zapret2_installed);
   const byedpiInstalled = Boolean(systemInfo.byedpi_installed);
   const singBoxInstalled = !isNotInstalled(systemInfo.sing_box_version);
-  const singBoxStable = singBoxInstalled && !systemInfo.sing_box_extended && !systemInfo.sing_box_tiny;
   const singBoxExtended = Boolean(systemInfo.sing_box_extended) && !systemInfo.sing_box_compressed;
   const singBoxExtendedCompressed = Boolean(systemInfo.sing_box_extended) && Boolean(systemInfo.sing_box_compressed);
-  const singBoxTiny = Boolean(systemInfo.sing_box_tiny);
   const forkopActions = getInstalledUpdateActions(
     "forkop",
     "forkopCheck",
@@ -13404,24 +13384,6 @@ function getComponentCards() {
     "singBoxInstall",
     singBoxInstalled
   );
-  if (!singBoxStable) {
-    singBoxActions.push({
-      key: "singBoxInstallStable",
-      text: "Stable",
-      icon: renderDownloadIcon24,
-      component: "sing_box",
-      action: "install_stable"
-    });
-  }
-  if (!singBoxTiny) {
-    singBoxActions.push({
-      key: "singBoxInstallTiny",
-      text: "Tiny",
-      icon: renderDownloadIcon24,
-      component: "sing_box",
-      action: "install_tiny"
-    });
-  }
   if (!singBoxExtended) {
     singBoxActions.push({
       key: "singBoxInstallExtended",

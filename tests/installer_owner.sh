@@ -108,19 +108,19 @@ grep -Fq 'ensure_bootstrap_package "ucode-mod-uci"' "$INSTALLER" ||
 
 grep -Fq '/usr/bin/forkop component_action sing_box "$action"' "$INSTALLER" ||
   fail "selected sing-box install must delegate to forkop component_action"
-for action in install_stable install_extended install_extended_compressed; do
+for action in install_extended install_extended_compressed; do
   grep -Fq "action=\"$action\"" "$INSTALLER" ||
     fail "selected sing-box installer is missing action mapping: $action"
 done
-grep -Fq 'sing_box_is_present' "$INSTALLER" ||
-  fail "installer must detect an existing sing-box before showing the build choice"
-grep -Fq 'singbox extended (если нужен xhttp)' "$INSTALLER" ||
-  fail "extended sing-box choice must explain that it is needed for xhttp"
+if grep -Fq 'action="install_stable"' "$INSTALLER"; then
+  fail "installer must not install sing-box from OpenWrt feeds: Forkop requires sing-box-extended"
+fi
+grep -Fq 'sing_box_extended_is_present' "$INSTALLER" ||
+  fail "installer must keep an existing sing-box-extended"
+grep -Fq 'sing_box_replace_msg' "$INSTALLER" ||
+  fail "installer must tell that a sing-box from OpenWrt feeds is replaced with sing-box-extended"
 grep -Fq 'Русский пакет интерфейса будет установлен автоматически.' "$INSTALLER" ||
   fail "Russian LuCI language must enable the Russian interface package without a prompt"
-if grep -n -E 'installer_text (sing_box_tiny|sing_box_extended_compressed)' "$INSTALLER" >/dev/null; then
-  fail "fresh sing-box build choice must contain only stable and extended"
-fi
 
 grep -Fq 'run_args([ bin_path, "restore_dnsmasq" ])' "$INSTALLER" ||
   fail "installer dnsmasq restore must prefer the active backend entrypoint"

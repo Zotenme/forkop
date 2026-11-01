@@ -10,10 +10,13 @@ Forkop — сервис маршрутизации трафика для OpenWrt
 sh <(wget -O - https://raw.githubusercontent.com/Zotenme/forkop/main/install.sh)
 ```
 
+Forkop работает на [sing-box-extended](https://github.com/shtorm-7/sing-box-extended) 1.14 и новее. Установщик ставит его сам, а sing-box из пакетов OpenWrt заменяет на него.
+
 ### Возможности
 
 * Поддержка подписок.
-* Поддержка sing-box extended и транспорта XHTTP.
+* Транспорт XHTTP.
+* Цепочка DNS-серверов: каждый запрос идёт к серверам по порядку, пока один не даст нормальный ответ.
 * Обновлённый LuCI-интерфейс.
 * Расширенное управление секциями.
 * Расширенные условия маршрутизации.
