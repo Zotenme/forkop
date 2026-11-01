@@ -281,9 +281,6 @@ msgstr "ошибка проверки"
 msgid "Check interval"
 msgstr "Интервал проверки"
 
-msgid "Check servers"
-msgstr "Проверить серверы"
-
 msgid "Check timeout after which the server is considered dead"
 msgstr "Таймаут проверки, после которого сервер считается мёртвым"
 
@@ -310,9 +307,6 @@ msgstr "Проверки пройдены"
 
 msgid "Checks passed with manual DHCP"
 msgstr "Проверки пройдены с ручным DHCP"
-
-msgid "Checks the servers above from the router, before saving. The column of the selected protocol is marked with ★."
-msgstr "Проверяет серверы из полей выше прямо с роутера, ещё до сохранения. Колонка выбранного протокола отмечена ★."
 
 msgid "CIDR must be between 0 and 32 for IPv4 or 0 and 128 for IPv6"
 msgstr "CIDR должен быть от 0 до 32 для IPv4 или от 0 до 128 для IPv6"
@@ -1733,9 +1727,6 @@ msgstr "Selector и URLTest outbound должны содержать непус�
 msgid "Server"
 msgstr "Сервер"
 
-msgid "Server check"
-msgstr "Проверка серверов"
-
 msgid "Server filtering"
 msgstr "Фильтрация серверов"
 
@@ -1942,6 +1933,9 @@ msgstr "Tailscale endpoint"
 
 msgid "Tailscale hostname"
 msgstr "Hostname Tailscale"
+
+msgid "Test"
+msgstr "Проверить"
 
 msgid "Test latency"
 msgstr "Тестирование задержки"

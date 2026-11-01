@@ -156,7 +156,51 @@ function configureDnsDuration(
   configureDnsFailoverVisibility(option, dnsOption, bootstrapOption);
 }
 
-const DNS_CHECK_PROTOCOLS = ["udp", "dot", "doh"];
+const DNS_TEST_STYLE_ID = "fkp-dns-test-styles";
+const DNS_PROTOCOL_LABELS = { udp: "UDP", dot: "DoT", doh: "DoH" };
+
+function ensureDnsTestStyles() {
+  if (document.getElementById(DNS_TEST_STYLE_ID)) {
+    return;
+  }
+
+  document.head.appendChild(
+    E(
+      "style",
+      { id: DNS_TEST_STYLE_ID },
+      `
+.fkp-dns-test-dynlist > .item {
+  align-items: center;
+  display: flex;
+  gap: 0.5em;
+}
+
+.fkp-dns-test-dynlist > .item > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fkp-dns-test-dynlist > .item > .fkp-dns-test {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  line-height: 1.5;
+  margin: -3px 0;
+  min-height: 0;
+  padding: 0 0.6em;
+  white-space: nowrap;
+}
+
+.fkp-dns-test-dynlist > .item > .fkp-dns-test-ok {
+  color: var(--success-color-medium, green);
+}
+
+.fkp-dns-test-dynlist > .item > .fkp-dns-test-failed {
+  color: var(--error-color-medium, red);
+}
+`,
+    ),
+  );
+}
 
 function dnsCheckErrorText(error) {
   switch (error) {
@@ -175,83 +219,12 @@ function dnsCheckErrorText(error) {
   }
 }
 
-function dnsCheckCell(result) {
-  if (!result) {
-    return E("span", {}, "—");
-  }
-  if (result.pending) {
-    return E("span", { class: "spinning" }, _("Checking…"));
-  }
-  return result.ok
-    ? E(
-        "span",
-        { style: "color:var(--success-color-medium, green)" },
-        result.ms != null ? `✓ ${result.ms} ${_("ms")}` : "✓",
-      )
-    : E(
-        "span",
-        { style: "color:var(--error-color-medium, red)" },
-        `✗ ${dnsCheckErrorText(result.error)}`,
-      );
-}
-
-function dnsCheckServerLabel(row) {
-  const nodes = [E("strong", {}, row.server)];
-  if (row.bootstrap) {
-    nodes.push(E("br"), E("small", {}, _("Bootstrap DNS")));
-  }
-  if (row.response?.bootstrap_ok === true) {
-    nodes.push(
-      E("br"),
-      E(
-        "small",
-        {},
-        _("Address via bootstrap: %s").format(row.response.resolved),
-      ),
-    );
-  } else if (row.response?.bootstrap_ok === false) {
-    nodes.push(
-      E("br"),
-      E(
-        "small",
-        { style: "color:var(--error-color-medium, red)" },
-        _("Bootstrap DNS could not resolve this name"),
-      ),
-    );
-  }
-  return nodes;
-}
-
-function renderDnsCheckTable(container, rows, dnsType) {
-  const header = E("tr", { class: "tr table-titles" }, [
-    E("th", { class: "th" }, _("Server")),
-    ...DNS_CHECK_PROTOCOLS.map((protocol) =>
-      E(
-        "th",
-        { class: "th" },
-        protocol === dnsType
-          ? E("strong", {}, `${protocol.toUpperCase()} ★`)
-          : protocol.toUpperCase(),
-      ),
-    ),
-  ]);
-  const body = rows.map((row) =>
-    E("tr", { class: "tr" }, [
-      E("td", { class: "td" }, dnsCheckServerLabel(row)),
-      ...DNS_CHECK_PROTOCOLS.map((protocol) =>
-        E("td", { class: "td" }, dnsCheckCell(row.results[protocol])),
-      ),
-    ]),
-  );
-  dom.content(container, E("table", { class: "table" }, [header, ...body]));
-}
-
-function runDnsServerCheck(server, protocols, bootstrap) {
+function runDnsServerCheck(server, protocol, bootstrap) {
   return fs
     .exec("/usr/bin/forkop", [
       "check_dns_server",
       server,
-      protocols.join(","),
+      protocol,
       bootstrap || "",
     ])
     .then((response) => {
@@ -263,75 +236,128 @@ function runDnsServerCheck(server, protocols, bootstrap) {
     });
 }
 
-// Checks what is typed in the form, so a server can be tried before it is saved.
-function checkDnsServers(container, section_id, options) {
-  const dnsType = options.typeOption.formvalue(section_id) || "udp";
-  const bootstrapServers = optionListValues(
-    options.bootstrapOption,
-    section_id,
-  );
-  const rows = [
-    ...optionListValues(options.dnsOption, section_id).map((server) => ({
-      server,
-      protocols: DNS_CHECK_PROTOCOLS,
-    })),
-    // Bootstrap servers are always queried over plain DNS.
-    ...bootstrapServers.map((server) => ({
-      server,
-      bootstrap: true,
-      protocols: ["udp"],
-    })),
-  ].map((row) => ({
-    ...row,
-    results: Object.fromEntries(
-      row.protocols.map((protocol) => [protocol, { pending: true }]),
-    ),
-  }));
+function dnsTestOutcome(response, protocol) {
+  const label = DNS_PROTOCOL_LABELS[protocol] || protocol;
+  const result = response.results?.[protocol] || {};
+  const via = response.resolved
+    ? `\n${_("Address via bootstrap: %s").format(response.resolved)}`
+    : "";
 
-  if (!rows.length) {
-    dom.content(container, E("em", {}, _("Add at least one DNS server")));
-    return Promise.resolve();
+  // sing-box cannot use a server whose name the bootstrap servers cannot find.
+  if (response.bootstrap_ok === false) {
+    return {
+      ok: false,
+      text: `${label} ✗ bootstrap`,
+      title: _("Bootstrap DNS could not resolve this name"),
+    };
   }
-
-  const render = () => renderDnsCheckTable(container, rows, dnsType);
-  render();
-
-  return Promise.all(
-    rows.map((row) =>
-      runDnsServerCheck(row.server, row.protocols, bootstrapServers[0])
-        .then((response) => {
-          row.response = response;
-          row.results = response.results || {};
-        })
-        .catch(() => {
-          row.results = Object.fromEntries(
-            row.protocols.map((protocol) => [
-              protocol,
-              { ok: false, error: "check_failed" },
-            ]),
-          );
-        })
-        .finally(render),
-    ),
-  );
+  if (!result.ok) {
+    return {
+      ok: false,
+      text: `${label} ✗ ${dnsCheckErrorText(result.error)}`,
+      title: via.trim(),
+    };
+  }
+  return {
+    ok: true,
+    text:
+      result.ms != null ? `${label} ✓ ${result.ms} ${_("ms")}` : `${label} ✓`,
+    title: `example.com → ${result.address}${via}`,
+  };
 }
 
-function configureDnsCheck(option, options) {
-  option.renderWidget = function (section_id) {
-    const results = E("div", { style: "margin-top:.5em" });
+function testDnsServer(button, server, options) {
+  button.disabled = true;
+  button.classList.remove("fkp-dns-test-ok", "fkp-dns-test-failed");
+  button.textContent = _("Checking…");
+  button.title = "";
+
+  return runDnsServerCheck(server, options.protocol, options.bootstrap)
+    .then((response) => dnsTestOutcome(response, options.protocol))
+    .catch(() => ({
+      ok: false,
+      text: `✗ ${dnsCheckErrorText("check_failed")}`,
+      title: "",
+    }))
+    .then((outcome) => {
+      button.disabled = false;
+      button.classList.add(
+        outcome.ok ? "fkp-dns-test-ok" : "fkp-dns-test-failed",
+      );
+      button.textContent = outcome.text;
+      button.title = outcome.title;
+    });
+}
+
+// A DynamicList with a Test button on every server; the check runs from the
+// router on what is typed in the form, so a server can be tried before saving.
+const DnsTestUIDynamicList = ui.DynamicList.extend({
+  render() {
+    ensureDnsTestStyles();
+
+    const node = ui.DynamicList.prototype.render.apply(this, arguments);
+    node.classList.add("fkp-dns-test-dynlist");
+    return node;
+  },
+
+  addItem(dl, value, text, flash) {
+    ui.DynamicList.prototype.addItem.call(this, dl, value, text, flash);
+
+    const item = Array.from(dl.querySelectorAll(":scope > .item")).find(
+      (node) => node.querySelector('input[type="hidden"]')?.value === value,
+    );
+    if (!item || item.querySelector(".fkp-dns-test")) {
+      return;
+    }
+
     const button = E(
       "button",
       {
-        class: "cbi-button cbi-button-action",
-        click: ui.createHandlerFn(this, () =>
-          checkDnsServers(results, section_id, options),
-        ),
+        type: "button",
+        class: "cbi-button fkp-dns-test",
+        disabled: this.options.disabled ? "" : null,
+        click: (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          testDnsServer(button, value, this.options.testOptions());
+        },
+        // Delete and Backspace on an item remove it.
+        keydown: (event) => event.stopPropagation(),
       },
-      _("Check servers"),
+      _("Test"),
     );
-    return E("div", {}, [button, results]);
-  };
-}
+    item.appendChild(button);
+  },
+
+  handleClick(event) {
+    if (event.target.closest(".fkp-dns-test")) {
+      return;
+    }
+
+    return ui.DynamicList.prototype.handleClick.apply(this, arguments);
+  },
+});
+
+const DnsTestDynamicList = form.DynamicList.extend({
+  renderWidget(section_id, _option_index, cfgvalue) {
+    const value = cfgvalue != null ? cfgvalue : this.default;
+    const widget = new DnsTestUIDynamicList(
+      L.toArray(value),
+      this.transformChoices(),
+      {
+        id: this.cbid(section_id),
+        sort: this.keylist,
+        optional: this.optional || this.rmempty,
+        datatype: this.datatype,
+        placeholder: this.placeholder,
+        validate: L.bind(this.validate, this, section_id),
+        disabled: this.readonly != null ? this.readonly : this.map.readonly,
+        testOptions: () => this.dnsTestOptions(section_id),
+      },
+    );
+    return widget.render();
+  },
+});
 
 function createDnsContent(section, capabilities) {
   let o = section.option(
@@ -345,9 +371,10 @@ function createDnsContent(section, capabilities) {
   o.value("udp", _("UDP (Unprotected DNS)"));
   o.default = "udp";
   o.rmempty = false;
+  const typeOption = o;
 
   const dnsOption = section.option(
-    form.DynamicList,
+    DnsTestDynamicList,
     "dns_server",
     _("DNS Servers"),
     _(
@@ -357,7 +384,7 @@ function createDnsContent(section, capabilities) {
   configureDnsList(dnsOption, main.DNS_SERVER_OPTIONS, "77.88.8.8");
 
   const bootstrapOption = section.option(
-    form.DynamicList,
+    DnsTestDynamicList,
     "bootstrap_dns_server",
     _("Bootstrap DNS Servers"),
     _(
@@ -370,19 +397,12 @@ function createDnsContent(section, capabilities) {
     "77.88.8.8",
   );
 
-  const checkOption = section.option(
-    form.DummyValue,
-    "_dns_check",
-    _("Server check"),
-    _(
-      "Checks the servers above from the router, before saving. The column of the selected protocol is marked with ★.",
-    ),
-  );
-  configureDnsCheck(checkOption, {
-    typeOption: o,
-    dnsOption,
-    bootstrapOption,
+  dnsOption.dnsTestOptions = (section_id) => ({
+    protocol: typeOption.formvalue(section_id) || "udp",
+    bootstrap: optionListValues(bootstrapOption, section_id)[0] || "",
   });
+  // Bootstrap servers are always queried over plain DNS.
+  bootstrapOption.dnsTestOptions = () => ({ protocol: "udp", bootstrap: "" });
 
   o = section.option(
     form.Value,

@@ -151,7 +151,7 @@ msgstr ""
 msgid "Address"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:209
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:243
 msgid "Address via bootstrap: %s"
 msgstr ""
 
@@ -271,7 +271,7 @@ msgstr ""
 msgid "Bootstrap DNS"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:218
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:251
 msgid "Bootstrap DNS could not resolve this name"
 msgstr ""
 
@@ -390,7 +390,7 @@ msgstr ""
 msgid "Certificate pin is unavailable. Apply or restart the server to generate the default certificate, then open this dialog again."
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:172
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:216
 msgid "check failed"
 msgstr ""
 
@@ -398,10 +398,6 @@ msgstr ""
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2929
 #: src/forkop/tabs/dashboard/initController.ts:1142
 msgid "Check interval"
-msgstr ""
-
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:330
-msgid "Check servers"
 msgstr ""
 
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2942
@@ -431,7 +427,7 @@ msgstr ""
 msgid "Checking, please wait"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:183
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:272
 msgid "Checking…"
 msgstr ""
 
@@ -452,10 +448,6 @@ msgstr ""
 
 #: src/forkop/tabs/diagnostic/checks/getDnsCheckPresentation.ts:27
 msgid "Checks passed with manual DHCP"
-msgstr ""
-
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:378
-msgid "Checks the servers above from the router, before saving. The column of the selected protocol is marked with ★."
 msgstr ""
 
 #: src/validators/validateSubnet.ts:35
@@ -880,7 +872,7 @@ msgstr ""
 msgid "Edit rule action"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:170
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:214
 msgid "empty answer"
 msgstr ""
 
@@ -965,7 +957,7 @@ msgstr ""
 msgid "Enter the subscription URL"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:174
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:218
 msgid "error"
 msgstr ""
 
@@ -1295,7 +1287,7 @@ msgstr ""
 msgid "Host"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:168
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:212
 msgid "host not found"
 msgstr ""
 
@@ -1825,7 +1817,7 @@ msgstr ""
 msgid "Monitoring"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:189
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:264
 msgid "ms"
 msgstr ""
 
@@ -1913,7 +1905,7 @@ msgstr ""
 msgid "No public firewall port required"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:166
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:210
 msgid "no response"
 msgstr ""
 
@@ -2497,10 +2489,6 @@ msgstr ""
 msgid "Server"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:376
-msgid "Server check"
-msgstr ""
-
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2537
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2743
 msgid "Server filtering"
@@ -2787,6 +2775,10 @@ msgstr ""
 msgid "Tailscale hostname"
 msgstr ""
 
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:327
+msgid "Test"
+msgstr ""
+
 #: src/forkop/tabs/dashboard/partials/renderSections.ts:242
 #: src/forkop/tabs/dashboard/partials/renderSections.ts:250
 #: src/forkop/tabs/dashboard/partials/renderSections.ts:491
@@ -2898,8 +2890,7 @@ msgstr ""
 msgid "Time skew tolerance"
 msgstr ""
 
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:163
-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:164
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:208
 msgid "timeout"
 msgstr ""
 
