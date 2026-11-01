@@ -1284,10 +1284,19 @@ function migrate_http_connection_urls(ctx) {
     }
 }
 
+// Every query now walks the DNS servers in order, so the background checks
+// and their intervals are gone; one timeout per server replaces them.
+function migrate_dns_query_chain(ctx) {
+    for (let key in [ "dns_check_interval", "dns_recovery_check_interval", "dns_check_timeout" ])
+        delete_option(ctx, ctx.model.settings, key);
+    set_option_if_missing(ctx, ctx.model.settings, "dns_query_timeout", "500ms");
+}
+
 const MIGRATIONS = [
     { id: "interface_sections", run: migrate_interface_sections },
     { id: "enable_component_checks", run: migrate_enable_component_checks },
-    { id: "http_connection_urls", run: migrate_http_connection_urls }
+    { id: "http_connection_urls", run: migrate_http_connection_urls },
+    { id: "dns_query_chain", run: migrate_dns_query_chain }
 ];
 
 function apply_migrations(ctx) {

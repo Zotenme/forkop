@@ -21,9 +21,6 @@ function config(settings, runtime) {
     let dns_inbounds = [ runtime_constants.DNS_INBOUND_TAG ];
     if (type(runtime) == "object" && bool_value(runtime.source_aware_dns))
         push(dns_inbounds, runtime_constants.SOURCE_DNS_INBOUND_TAG);
-    if (type(runtime) == "object" && type(runtime.dns_health_inbounds) == "array")
-        for (let inbound in runtime.dns_health_inbounds)
-            push(dns_inbounds, inbound);
     let sniff_inbounds = [ runtime_constants.TPROXY_INBOUND_TAG ];
     for (let inbound in dns_inbounds)
         push(sniff_inbounds, inbound);

@@ -5,6 +5,11 @@ import type { IDiagnosticsChecksItem } from '../../../services';
 import { updateCheckStore } from './updateCheckStore';
 import { getDnsCheckPresentation } from './getDnsCheckPresentation';
 
+// Every query walks the servers in order, so the first one stands for the list.
+function withBackupCount(server: string, count: number) {
+  return count > 1 ? `${server} +${count - 1}` : server;
+}
+
 export async function runDnsCheck() {
   const { order, title, code } = DIAGNOSTICS_CHECKS_MAP.DNS;
 
@@ -51,24 +56,21 @@ export async function runDnsCheck() {
         [
           {
             state: data.bootstrap_dns_status ? 'success' : 'error',
-            key:
-              data.bootstrap_dns_server_count > 1
-                ? _('Active Bootstrap DNS')
-                : _('Bootstrap DNS'),
-            value:
-              data.bootstrap_dns_server_count > 1
-                ? `${data.bootstrap_dns_server} (${data.bootstrap_dns_server_index + 1}/${data.bootstrap_dns_server_count})`
-                : data.bootstrap_dns_server,
+            key: _('Bootstrap DNS'),
+            value: withBackupCount(
+              data.bootstrap_dns_server,
+              data.bootstrap_dns_server_count,
+            ),
           },
         ],
       ),
       {
         state: data.dns_status ? 'success' : 'error',
-        key: data.dns_server_count > 1 ? _('Active Main DNS') : _('Main DNS'),
-        value:
-          data.dns_server_count > 1
-            ? `${data.dns_server} [${data.dns_type}] (${data.dns_server_index + 1}/${data.dns_server_count})`
-            : `${data.dns_server} [${data.dns_type}]`,
+        key: _('Main DNS'),
+        value: withBackupCount(
+          `${data.dns_server} [${data.dns_type}]`,
+          data.dns_server_count,
+        ),
       },
       {
         state: data.dns_on_router ? 'success' : 'error',

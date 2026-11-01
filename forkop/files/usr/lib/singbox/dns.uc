@@ -8,13 +8,16 @@ let runtime_url = require("core.url");
 let as_string = common.as_string;
 let bool_option = common.bool_option;
 let list_option = common.list_option;
-let object_or_empty = common.object_or_empty;
 let option = common.option;
-let read_json_file = common.read_json_file;
 
-const DNS_FAILOVER_STATE_FILE = getenv("FORKOP_DNS_FAILOVER_STATE_FILE") || "/var/run/forkop/dns-failover.json";
-const DNS_HEALTH_ADDRESS = getenv("FORKOP_DNS_HEALTH_ADDRESS") || "127.0.0.42";
-const DNS_HEALTH_PORT_BASE = int(getenv("FORKOP_DNS_HEALTH_PORT_BASE") || "10053");
+const DEFAULT_QUERY_TIMEOUT = "500ms";
+// Filtering resolvers answer a blocked or unknown name with these addresses.
+const BLOCKED_ADDRESSES = [ "0.0.0.0/32", "::/128" ];
+// Rule fields that say what to do rather than which queries match.
+const ACTION_FIELDS = [
+    "action", "server", "rewrite_ttl", "disable_cache", "disable_optimistic_cache",
+    "client_subnet", "timeout"
+];
 
 function server_list(settings, key, fallback) {
     let result = [];
@@ -28,15 +31,6 @@ function server_list(settings, key, fallback) {
     return result;
 }
 
-function arrays_equal(left, right) {
-    if (length(left || []) != length(right || []))
-        return false;
-    for (let i = 0; i < length(left); i++)
-        if (as_string(left[i]) != as_string(right[i]))
-            return false;
-    return true;
-}
-
 function detour_tag(settings) {
     if (!bool_option(settings, "dns_detour_enabled", false))
         return "";
@@ -44,56 +38,24 @@ function detour_tag(settings) {
     return section_name == "" ? "" : runtime_constants.outbound_tag(section_name);
 }
 
-function state_template(settings) {
-    return {
-        version: 1,
-        dns_type: option(settings, "dns_type", "udp"),
-        dns_detour: detour_tag(settings),
-        main_servers: server_list(settings, "dns_server", "77.88.8.8"),
-        bootstrap_servers: server_list(settings, "bootstrap_dns_server", "77.88.8.8"),
-        main_index: 0,
-        bootstrap_index: 0
-    };
+function duration_milliseconds(value) {
+    let rest = as_string(value);
+    let total = 0.0;
+    let units = { ns: 0.000001, us: 0.001, ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000 };
+    while (rest != "") {
+        let matched = match(rest, /^([0-9]+(\.[0-9]+)?)(ns|us|ms|s|m|h|d)/);
+        if (!matched)
+            return 0;
+        total += (matched[1] * 1) * units[matched[3]];
+        rest = substr(rest, length(matched[0]));
+    }
+    return int(total + 0.5);
 }
 
-function state_matches(template, state) {
-    state = object_or_empty(state);
-    return int(state.version || 0) == 1 &&
-        as_string(state.dns_type) == template.dns_type &&
-        as_string(state.dns_detour) == template.dns_detour &&
-        arrays_equal(state.main_servers, template.main_servers) &&
-        arrays_equal(state.bootstrap_servers, template.bootstrap_servers);
-}
-
-function bounded_index(value, values) {
-    let index_value = int(value || 0);
-    return index_value >= 0 && index_value < length(values) ? index_value : 0;
-}
-
-function normalize_state(settings, state) {
-    let result = state_template(settings);
-    if (!state_matches(result, state))
-        return result;
-
-    result.main_index = bounded_index(object_or_empty(state).main_index, result.main_servers);
-    result.bootstrap_index = bounded_index(object_or_empty(state).bootstrap_index, result.bootstrap_servers);
-    return result;
-}
-
-function runtime_state(settings, override_state) {
-    let state = override_state;
-    if (state == null)
-        state = read_json_file(DNS_FAILOVER_STATE_FILE);
-    return normalize_state(settings, state);
-}
-
-function active_values(settings, override_state) {
-    let state = runtime_state(settings, override_state);
-    return {
-        state,
-        main: state.main_servers[state.main_index],
-        bootstrap: state.bootstrap_servers[state.bootstrap_index]
-    };
+// How long one server may take before the query moves on to the next one.
+function query_timeout(settings) {
+    let value = option(settings, "dns_query_timeout", DEFAULT_QUERY_TIMEOUT);
+    return duration_milliseconds(value) > 0 ? value : DEFAULT_QUERY_TIMEOUT;
 }
 
 function server_from_options(tag_name, dns_type, dns_server, detour) {
@@ -144,107 +106,153 @@ function bootstrap_server(tag_name, value) {
     };
 }
 
-function server_config(settings, override_state) {
-    let active = active_values(settings, override_state);
-    return server_from_options(
-        runtime_constants.DNS_SERVER_TAG,
-        active.state.dns_type,
-        active.main,
-        active.state.dns_detour
-    );
+function item_tag(base_tag, index_value) {
+    return base_tag + "-" + as_string(index_value + 1);
 }
 
-function bootstrap_config(settings, override_state) {
-    let active = active_values(settings, override_state);
-    return bootstrap_server(runtime_constants.BOOTSTRAP_DNS_SERVER_TAG, active.bootstrap);
+// sing-box-extended's fallback server tries its servers in order and moves on
+// after a timeout or an error reply; it serves lookups that bypass DNS rules.
+function fallback_server(tag_name, tags, timeout) {
+    return {
+        type: "fallback",
+        tag: tag_name,
+        servers: tags,
+        strategy: "sequential",
+        timeout: as_string(duration_milliseconds(timeout) * length(tags)) + "ms"
+    };
 }
 
-function failover_enabled(settings) {
-    let state = state_template(settings);
-    return length(state.main_servers) > 1 || length(state.bootstrap_servers) > 1;
-}
+// features.fallback_server: the core has sing-box-extended's fallback server.
+// Returns the DNS servers and the main-server chain that client queries walk.
+function config(settings, features) {
+    features = features || {};
+    let dns_type = option(settings, "dns_type", "udp");
+    let detour = detour_tag(settings);
+    let timeout = query_timeout(settings);
+    let main_servers = server_list(settings, "dns_server", "77.88.8.8");
+    let bootstrap_servers = server_list(settings, "bootstrap_dns_server", "77.88.8.8");
+    let servers = [];
+    let chain = [];
 
-function health_tag(kind, index_value, suffix) {
-    return "dns-health-" + as_string(kind) + "-" + as_string(index_value + 1) + "-" + as_string(suffix);
-}
-
-function health_port(kind, index_value) {
-    if (kind == "active")
-        return DNS_HEALTH_PORT_BASE + 2000;
-    return DNS_HEALTH_PORT_BASE + int(index_value) * 2 + (kind == "bootstrap" ? 1 : 0);
-}
-
-function add_active_health_inbound(result) {
-    let inbound_tag = "dns-health-active-main-in";
-    push(result.inbounds, {
-        type: "direct",
-        tag: inbound_tag,
-        listen: DNS_HEALTH_ADDRESS,
-        listen_port: health_port("active", 0)
-    });
-    push(result.rules, {
-        action: "route",
-        inbound: inbound_tag,
-        server: runtime_constants.DNS_SERVER_TAG,
-        disable_cache: true
-    });
-    push(result.sniff_inbounds, inbound_tag);
-}
-
-function add_health_candidate(result, kind, index_value, server) {
-    let server_tag = health_tag(kind, index_value, "server");
-    let inbound_tag = health_tag(kind, index_value, "in");
-    let dns_server = kind == "main"
-        ? server_from_options(server_tag, result.state.dns_type, server, result.state.dns_detour)
-        : bootstrap_server(server_tag, server);
-
-    if (dns_server.unsupported) {
-        result.unsupported = dns_server.unsupported;
-        return;
+    if (length(bootstrap_servers) > 1 && features.fallback_server) {
+        let tags = [];
+        for (let i = 0; i < length(bootstrap_servers); i++) {
+            push(tags, item_tag(runtime_constants.BOOTSTRAP_DNS_SERVER_TAG, i));
+            push(servers, bootstrap_server(tags[i], bootstrap_servers[i]));
+        }
+        push(servers, fallback_server(runtime_constants.BOOTSTRAP_DNS_SERVER_TAG, tags, timeout));
+    }
+    else {
+        push(servers, bootstrap_server(runtime_constants.BOOTSTRAP_DNS_SERVER_TAG, bootstrap_servers[0]));
     }
 
-    push(result.servers, dns_server);
-    push(result.inbounds, {
-        type: "direct",
-        tag: inbound_tag,
-        listen: DNS_HEALTH_ADDRESS,
-        listen_port: health_port(kind, index_value)
-    });
-    push(result.rules, {
-        action: "route",
-        inbound: inbound_tag,
-        server: server_tag,
-        disable_cache: true
-    });
-    push(result.sniff_inbounds, inbound_tag);
-}
+    if (length(main_servers) > 1) {
+        for (let i = 0; i < length(main_servers); i++) {
+            let server = server_from_options(item_tag(runtime_constants.DNS_SERVER_TAG, i), dns_type, main_servers[i], detour);
+            if (server.unsupported)
+                return { unsupported: server.unsupported };
+            push(servers, server);
+            push(chain, server.tag);
+        }
+    }
 
-function config(settings, override_state) {
-    let state = runtime_state(settings, override_state);
-    let main = server_config(settings, state);
+    // Lookups that skip DNS rules, like proxy addresses, use the main tag
+    // directly; without the fallback server it is the first server alone.
+    let main = length(chain) > 1 && features.fallback_server
+        ? fallback_server(runtime_constants.DNS_SERVER_TAG, chain, timeout)
+        : server_from_options(runtime_constants.DNS_SERVER_TAG, dns_type, main_servers[0], detour);
     if (main.unsupported)
         return { unsupported: main.unsupported };
+    push(servers, main);
 
-    let result = {
-        state,
-        servers: [ bootstrap_config(settings, state), main ],
-        inbounds: [],
-        rules: [],
-        sniff_inbounds: []
+    return { servers, chain, timeout };
+}
+
+// A reply is kept when the server answered NOERROR without a blocking address;
+// an A query also needs an address. Anything else, NXDOMAIN included, moves on.
+function good_response_rule() {
+    return {
+        type: "logical",
+        mode: "and",
+        rules: [
+            { match_response: true, response_rcode: "NOERROR" },
+            { match_response: true, ip_cidr: BLOCKED_ADDRESSES, invert: true },
+            {
+                type: "logical",
+                mode: "or",
+                rules: [
+                    { query_type: "A", invert: true },
+                    { match_response: true, ip_accept_any: true }
+                ]
+            }
+        ]
     };
+}
 
-    if (length(state.main_servers) > 1 || length(state.bootstrap_servers) > 1)
-        add_active_health_inbound(result);
+function rule_parts(rule) {
+    let matchers = {};
+    let options = {};
+    for (let key, value in rule) {
+        if (index(ACTION_FIELDS, key) >= 0) {
+            if (key != "action" && key != "server")
+                options[key] = value;
+        }
+        else {
+            matchers[key] = value;
+        }
+    }
+    return { matchers, options };
+}
 
-    if (length(state.main_servers) > 1)
-        for (let i = 0; i < length(state.main_servers); i++)
-            add_health_candidate(result, "main", i, state.main_servers[i]);
+function with_fields(target, fields) {
+    for (let key, value in fields)
+        target[key] = value;
+    return target;
+}
 
-    if (length(state.bootstrap_servers) > 1)
-        for (let i = 0; i < length(state.bootstrap_servers); i++)
-            add_health_candidate(result, "bootstrap", i, state.bootstrap_servers[i]);
+// One rule that routes to the main server becomes: ask each server in turn,
+// keep a good reply, and let the last server answer whatever it says.
+function chain_rules(rule, chain, timeout) {
+    let parts = rule_parts(rule);
+    let has_matchers = length(keys(parts.matchers)) > 0;
+    let result = [];
 
+    for (let i = 0; i < length(chain) - 1; i++) {
+        push(result, with_fields(with_fields({}, parts.matchers), with_fields(with_fields({}, parts.options), {
+            action: "evaluate",
+            server: chain[i],
+            timeout
+        })));
+
+        let respond = good_response_rule();
+        if (has_matchers)
+            respond.rules = [ with_fields({}, parts.matchers), ...respond.rules ];
+        respond.action = "respond";
+        push(result, respond);
+    }
+
+    push(result, with_fields(with_fields(with_fields({}, parts.matchers), parts.options), {
+        action: "route",
+        server: chain[length(chain) - 1]
+    }));
     return result;
+}
+
+// Expands every route to the main server, and the final fallback, into the chain.
+function expand_chain(dns, chain, timeout) {
+    if (length(chain) < 2)
+        return;
+
+    let rules = [];
+    for (let rule in dns.rules) {
+        if (rule.action == "route" && rule.server == runtime_constants.DNS_SERVER_TAG)
+            push(rules, ...chain_rules(rule, chain, timeout));
+        else
+            push(rules, rule);
+    }
+    if (dns.final == runtime_constants.DNS_SERVER_TAG)
+        push(rules, ...chain_rules({ action: "route", server: runtime_constants.DNS_SERVER_TAG }, chain, timeout));
+    dns.rules = rules;
 }
 
 function default_domain_resolver(settings) {
@@ -254,21 +262,13 @@ function default_domain_resolver(settings) {
 }
 
 return {
-    DNS_FAILOVER_STATE_FILE,
-    DNS_HEALTH_ADDRESS,
-    active_values,
-    arrays_equal,
-    bootstrap_config,
+    DEFAULT_QUERY_TIMEOUT,
     config,
     default_domain_resolver,
     detour_tag,
-    failover_enabled,
-    health_port,
-    normalize_state,
-    runtime_state,
-    server_config,
+    duration_milliseconds,
+    expand_chain,
+    query_timeout,
     server_from_options,
-    server_list,
-    state_matches,
-    state_template
+    server_list
 };

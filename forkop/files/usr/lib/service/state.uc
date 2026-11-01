@@ -398,16 +398,6 @@ function pid_is_sing_box(pid) {
     return path_basename(command_trimmed_output_from_args([ "readlink", "/proc/" + pid + "/exe" ])) == "sing-box";
 }
 
-function hup_sing_box_runtime() {
-    let pid = sing_box_service_pid_runtime();
-    if (pid <= 0 || !pid_is_sing_box(pid))
-        exit(1);
-
-    command_success_from_args([ "logger", "-t", "forkop", "[info] Applying DNS failover with sing-box SIGHUP reload" ]);
-    if (!command_success_from_args([ "kill", "-HUP", as_string(pid) ]))
-        exit(1);
-}
-
 function process_start_ticks(stat) {
     stat = as_string(stat);
     let marker = index(stat, ") ");
@@ -1340,9 +1330,7 @@ function sing_box_signature_body(settings, sections, servers, mwan3_active) {
         body = signature_add_value(body, "settings.dns_server", value);
     for (let value in list_option(settings, "bootstrap_dns_server", "77.88.8.8"))
         body = signature_add_value(body, "settings.bootstrap_dns_server", value);
-    body = signature_add_value(body, "settings.dns_check_interval", option(settings, "dns_check_interval", "10s"));
-    body = signature_add_value(body, "settings.dns_recovery_check_interval", option(settings, "dns_recovery_check_interval", "60s"));
-    body = signature_add_value(body, "settings.dns_check_timeout", option(settings, "dns_check_timeout", "2s"));
+    body = signature_add_value(body, "settings.dns_query_timeout", option(settings, "dns_query_timeout", "500ms"));
     let dns_detour_enabled = bool_option_value(settings, "dns_detour_enabled", false);
     body = signature_add_value(body, "settings.dns_detour_enabled", dns_detour_enabled);
     if (dns_detour_enabled == "1")
@@ -1754,8 +1742,6 @@ else if (mode == "release-runtime-dir-lock")
     release_runtime_dir_lock(ARGV[1]);
 else if (mode == "reload-sing-box-runtime")
     reload_sing_box_runtime(ARGV[1], ARGV[2], ARGV[3], ARGV[4]);
-else if (mode == "hup-sing-box-runtime")
-    hup_sing_box_runtime();
 else if (mode == "clear-reload-state")
     clear_reload_state(ARGV[1], ARGV[2]);
 else if (mode == "capture-reload-state")

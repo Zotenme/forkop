@@ -831,11 +831,8 @@ function validate_dns_settings(settings, sections, context) {
         if (!dns_server_value_valid(value))
             fail_validation("Invalid Bootstrap DNS server '" + value + "'. Aborted.");
 
-    if (length(main_servers) > 1 || length(bootstrap_servers) > 1) {
-        validate_required_duration_option(option(settings, "dns_check_interval", "10s"), "settings.dns_check_interval");
-        validate_required_duration_option(option(settings, "dns_recovery_check_interval", "60s"), "settings.dns_recovery_check_interval");
-        validate_required_duration_option(option(settings, "dns_check_timeout", "2s"), "settings.dns_check_timeout");
-    }
+    if (length(main_servers) > 1 || length(bootstrap_servers) > 1)
+        validate_required_duration_option(option(settings, "dns_query_timeout", "500ms"), "settings.dns_query_timeout");
 
     if (!bool_option(settings, "dns_detour_enabled", false))
         return;
@@ -1954,7 +1951,7 @@ function check_runtime_requirements() {
             fail_requirement("Package 'sing-box' is not installed. Aborted.", "error");
     }
     else if (!version_at_least(sing_box_version, ctx.sing_box_required_version)) {
-        fail_requirement("Package 'sing-box' version (" + sing_box_version + ") is lower than the required minimum (" + ctx.sing_box_required_version + "). Update sing-box: opkg update && opkg remove sing-box && opkg install sing-box. Aborted.", "error");
+        fail_requirement("Package 'sing-box' version (" + sing_box_version + ") is lower than the required minimum (" + ctx.sing_box_required_version + "). Install sing-box-extended on the Components tab. Aborted.", "error");
     }
 
     if (!service_exists("sing-box") && sing_box_compressed_marker_set(ctx))

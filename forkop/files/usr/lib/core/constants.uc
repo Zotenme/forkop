@@ -51,7 +51,7 @@ function constants_map() {
     c.NFT_FAKEIP_MARK = env("NFT_FAKEIP_MARK", "0x04000000");
     c.NFT_OUTBOUND_MARK = env("NFT_OUTBOUND_MARK", "0x08000000");
 
-    c.SB_REQUIRED_VERSION = env("SB_REQUIRED_VERSION", "1.12.0");
+    c.SB_REQUIRED_VERSION = env("SB_REQUIRED_VERSION", "1.14.0");
     c.SB_MANAGED_SERVICE_MARKER = env("SB_MANAGED_SERVICE_MARKER", "Forkop managed sing-box service for binary variants");
     c.SB_DNS_SERVER_TAG = env("SB_DNS_SERVER_TAG", "dns-server");
     c.SB_FAKEIP_DNS_SERVER_TAG = env("SB_FAKEIP_DNS_SERVER_TAG", "fakeip-server");

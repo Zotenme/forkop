@@ -39,8 +39,9 @@ const PERSISTENT_SUBSCRIPTION_CACHE_DIR = getenv("FORKOP_PERSISTENT_SUBSCRIPTION
 const PERSISTENT_SUBSCRIPTION_CACHE_FORMAT_FILE = getenv("FORKOP_PERSISTENT_SUBSCRIPTION_CACHE_FORMAT_FILE") || PERSISTENT_SUBSCRIPTION_CACHE_DIR + "/cache-format";
 const PERSISTENT_SUBSCRIPTION_CACHE_FORMAT = getenv("FORKOP_PERSISTENT_SUBSCRIPTION_CACHE_FORMAT") || "7";
 const SUBSCRIPTION_BOOTSTRAP_RETRY_PID_FILE = getenv("FORKOP_SUBSCRIPTION_BOOTSTRAP_RETRY_PID_FILE") || RUNTIME_STATE_DIR + "/subscription-bootstrap-retry.pid";
-const DNS_FAILOVER_STATE_FILE = getenv("FORKOP_DNS_FAILOVER_STATE_FILE") || RUNTIME_STATE_DIR + "/dns-failover.json";
-const DNS_FAILOVER_PID_FILE = getenv("FORKOP_DNS_FAILOVER_PID_FILE") || RUNTIME_STATE_DIR + "/dns-failover.pid";
+// Left behind by the background DNS failover of earlier versions.
+const LEGACY_DNS_FAILOVER_STATE_FILE = getenv("FORKOP_DNS_FAILOVER_STATE_FILE") || RUNTIME_STATE_DIR + "/dns-failover.json";
+const LEGACY_DNS_FAILOVER_PID_FILE = getenv("FORKOP_DNS_FAILOVER_PID_FILE") || RUNTIME_STATE_DIR + "/dns-failover.pid";
 const SUBSCRIPTION_UPDATE_LOCK_DIR = getenv("FORKOP_SUBSCRIPTION_UPDATE_LOCK_DIR") || RUNTIME_STATE_DIR + "/subscription-update.lock";
 const RELOAD_LOCK_DIR = getenv("FORKOP_RELOAD_LOCK_DIR") || "/var/run/forkop.reload.lock";
 const INTERNAL_CONFIG_TRIGGER_GUARD = getenv("FORKOP_INTERNAL_CONFIG_TRIGGER_GUARD") || "/var/run/forkop.internal-config-change";
@@ -99,7 +100,6 @@ const SERVER_UC = LIB_DIR + "/server/service.uc";
 const NFT_UC = LIB_DIR + "/nft/apply.uc";
 const SINGBOX_UC = LIB_DIR + "/singbox/runtime.uc";
 const PRIORITY_UC = LIB_DIR + "/singbox/priority.uc";
-const DNS_FAILOVER_UC = LIB_DIR + "/singbox/dns_failover.uc";
 const SUBSCRIPTION_CACHE_UC = LIB_DIR + "/subscription/cache.uc";
 const UPDATES_UC = LIB_DIR + "/components/updates.uc";
 const STATE_UC = LIB_DIR + "/service/state.uc";
@@ -242,6 +242,17 @@ function remove_file(path) {
     return fs.unlink(as_string(path)) || true;
 }
 
+// An upgrade removes the worker's module but not the running worker, which
+// would keep probing DNS forever; it is stopped only if the PID is still it.
+function stop_legacy_dns_failover() {
+    let pid = trim(as_string(fs.readfile(LEGACY_DNS_FAILOVER_PID_FILE)));
+    if (match(pid, /^[0-9]+$/) != null &&
+        index(as_string(fs.readfile("/proc/" + pid + "/cmdline")), "dns_failover.uc") >= 0)
+        command_success_from_args([ "kill", pid ]);
+    remove_file(LEGACY_DNS_FAILOVER_PID_FILE);
+    remove_file(LEGACY_DNS_FAILOVER_STATE_FILE);
+}
+
 function ensure_dir(path) {
     path = as_string(path);
     return path == "" || fs.mkdir(path, 0755) || fs.stat(path) != null;
@@ -272,8 +283,6 @@ function lifecycle_env() {
         FORKOP_PERSISTENT_SUBSCRIPTION_CACHE_FORMAT_FILE: PERSISTENT_SUBSCRIPTION_CACHE_FORMAT_FILE,
         FORKOP_PERSISTENT_SUBSCRIPTION_CACHE_FORMAT: PERSISTENT_SUBSCRIPTION_CACHE_FORMAT,
         FORKOP_SUBSCRIPTION_BOOTSTRAP_RETRY_PID_FILE: SUBSCRIPTION_BOOTSTRAP_RETRY_PID_FILE,
-        FORKOP_DNS_FAILOVER_STATE_FILE: DNS_FAILOVER_STATE_FILE,
-        FORKOP_DNS_FAILOVER_PID_FILE: DNS_FAILOVER_PID_FILE,
         FORKOP_SUBSCRIPTION_UPDATE_LOCK_DIR: SUBSCRIPTION_UPDATE_LOCK_DIR,
         FORKOP_PENDING_RELOAD_FILE: PENDING_RELOAD_FILE,
         FORKOP_RELOAD_LOCK_DIR: RELOAD_LOCK_DIR,
@@ -784,12 +793,7 @@ function start_impl() {
     if (status != 0)
         return status;
 
-    status = module_status(DNS_FAILOVER_UC, [ "start-runtime" ]);
-    if (status != 0) {
-        log_message("Failed to start DNS failover runtime", "fatal");
-        return status;
-    }
-
+    stop_legacy_dns_failover();
     module_background(DIAGNOSTICS_UC, [ "get-system-info" ]);
     return 0;
 }
@@ -798,7 +802,7 @@ function stop_main() {
     let status = 0;
 
     log_message("Stopping Forkop", "info");
-    module_success(DNS_FAILOVER_UC, [ "stop-runtime" ]);
+    stop_legacy_dns_failover();
     module_success(PRIORITY_UC, [ "stop-runtime" ]);
     module_success(SUBSCRIPTION_CACHE_UC, [ "stop-deferred-bootstrap-worker" ]);
     module_success(UPDATES_UC, [ "stop-list-update" ]);
@@ -1030,77 +1034,6 @@ function reload_actions_summary(plan) {
     return actions;
 }
 
-function release_reload_lock() {
-    module_success(STATE_UC, [ "release-runtime-dir-lock", RELOAD_LOCK_DIR ]);
-}
-
-function sing_box_runtime_pid() {
-    let result = module_capture(STATE_UC, [ "sing-box-service-runtime-pid" ]);
-    return result.status == 0 ? trim(result.output) : "";
-}
-
-function wait_dns_failover_state(candidate_state_path, attempts) {
-    attempts = int(attempts || 1);
-    for (let i = 0; i < attempts; i++) {
-        let status = module_status(DNS_FAILOVER_UC, [ "verify-state", candidate_state_path ]);
-        if (status == 0)
-            return 0;
-        if (i + 1 < attempts)
-            command_success_from_args([ "sleep", "1" ]);
-    }
-    return 1;
-}
-
-function dns_failover_apply(candidate_state_path) {
-    candidate_state_path = as_string(candidate_state_path);
-    if (candidate_state_path == "" || fs.stat(candidate_state_path) == null)
-        return 1;
-
-    if (!module_success(STATE_UC, [ "acquire-runtime-dir-lock-wait", RELOAD_LOCK_DIR, owner_pid(), "2" ]))
-        return 2;
-
-    let patch_result = module_capture(SINGBOX_UC, [ "patch-dns-config", candidate_state_path ]);
-    if (patch_result.status != 0) {
-        release_reload_lock();
-        return patch_result.status;
-    }
-
-    let fields = split(trim(patch_result.output), "\t");
-    let changed = as_string(fields[0]) == "1";
-    let backup_path = length(fields) > 1 ? as_string(fields[1]) : "";
-    let status = 0;
-
-    if (changed) {
-        let sing_box_pid_before = sing_box_runtime_pid();
-        status = module_status(STATE_UC, [ "hup-sing-box-runtime" ]);
-        if (status == 0)
-            status = wait_dns_failover_state(candidate_state_path, 5);
-
-        if (status != 0) {
-            log_message("sing-box SIGHUP DNS reload did not become ready; trying service reload", "warn");
-            status = module_status(STATE_UC, [ "reload-sing-box-runtime", sing_box_pid_before, "dns-before", "dns-after" ]);
-            if (status == 0)
-                status = wait_dns_failover_state(candidate_state_path, 8);
-        }
-    }
-
-    if (status == 0 && !module_success(DNS_FAILOVER_UC, [ "commit-state", candidate_state_path ]))
-        status = 1;
-
-    if (status != 0 && backup_path != "") {
-        log_message("DNS failover apply failed; restoring the previous sing-box configuration", "error");
-        if (module_success(SINGBOX_UC, [ "restore-dns-config", backup_path ])) {
-            let sing_box_pid_before_restore = sing_box_runtime_pid();
-            module_success(STATE_UC, [ "reload-sing-box-runtime", sing_box_pid_before_restore, "dns-failed", "dns-restored" ]);
-        }
-    }
-
-    if (backup_path != "")
-        remove_file(backup_path);
-    release_reload_lock();
-    return status;
-}
-
 function reload(reason) {
     let status;
     let force_runtime_reload = as_string(reason || "") == "on_config_change" ? 0 : 1;
@@ -1214,7 +1147,6 @@ function reload(reason) {
     }
 
     if (plan.needs_sing_box_reload == 1) {
-        module_success(DNS_FAILOVER_UC, [ "stop-runtime" ]);
         module_success(PRIORITY_UC, [ "stop-runtime" ]);
         status = module_status(SINGBOX_UC, [ "configure-service" ]);
         if (status != 0)
@@ -1253,12 +1185,6 @@ function reload(reason) {
         status = module_status(PRIORITY_UC, [ "start-runtime" ]);
         if (status != 0) {
             log_message("Failed to start Priority runtime after sing-box reload", "fatal");
-            cleanup_failed_runtime();
-            return status;
-        }
-        status = module_status(DNS_FAILOVER_UC, [ "start-runtime" ]);
-        if (status != 0) {
-            log_message("Failed to restart DNS failover runtime after sing-box reload", "fatal");
             cleanup_failed_runtime();
             return status;
         }
@@ -1427,8 +1353,6 @@ else if (mode == "stop")
     status = stop();
 else if (mode == "reload")
     status = reload_tracked(ARGV[1] || "");
-else if (mode == "dns-failover-apply")
-    status = dns_failover_apply(ARGV[1] || "");
 else if (mode == "restart")
     status = restart();
 else if (mode == "enable")

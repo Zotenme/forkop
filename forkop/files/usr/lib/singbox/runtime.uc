@@ -3,7 +3,6 @@
 let fs = require("fs");
 let uci_core = require("core.uci");
 let common = require("core.common");
-let runtime_dns = require("singbox.dns");
 
 const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
 const LIB_DIR = getenv("FORKOP_LIB") || "/usr/lib/forkop";
@@ -686,82 +685,6 @@ function save_config_file(temp_file_path, config_path) {
     return true;
 }
 
-function replace_dns_server(config, replacement) {
-    let servers = array_or_empty(object_or_empty(config.dns).servers);
-    for (let i = 0; i < length(servers); i++) {
-        if (as_string(object_or_empty(servers[i]).tag) == as_string(replacement.tag)) {
-            servers[i] = replacement;
-            return true;
-        }
-    }
-    return false;
-}
-
-function patch_dns_config(state_path) {
-    let settings = uci_settings();
-    let candidate_state = common.read_json_file(state_path);
-    let expected = runtime_dns.state_template(settings);
-    if (!runtime_dns.state_matches(expected, candidate_state)) {
-        log_message("DNS failover state does not match the current UCI configuration", "warn");
-        exit(2);
-    }
-
-    let config_path = option(settings, "config_path", "");
-    let config = common.read_json_file(config_path);
-    if (config_path == "" || type(config) != "object") {
-        log_message("Cannot read the current sing-box configuration for DNS failover", "error");
-        exit(1);
-    }
-
-    let main = runtime_dns.server_config(settings, candidate_state);
-    let bootstrap = runtime_dns.bootstrap_config(settings, candidate_state);
-    if (main.unsupported || !replace_dns_server(config, main) || !replace_dns_server(config, bootstrap)) {
-        log_message("Cannot locate or build canonical DNS servers for failover", "error");
-        exit(1);
-    }
-
-    let backup_path = temp_path();
-    let temp_config = temp_path();
-    if (backup_path == "" || temp_config == "" ||
-        fs.writefile(backup_path, fs.readfile(config_path)) == null ||
-        !common.write_json_file(temp_config, config)) {
-        remove_files([ backup_path, temp_config ]);
-        exit(1);
-    }
-
-    let check_log = temp_path();
-    let check_result = check_log == ""
-        ? { status: 1, reason: "unable to create check output file" }
-        : sing_box_check(temp_config, check_log);
-    if (check_result.status != 0) {
-        log_message("DNS failover produced an invalid sing-box configuration: " + check_result.reason, "error");
-        remove_files([ backup_path, temp_config, check_log ]);
-        exit(1);
-    }
-    remove_file(check_log);
-
-    let changed = md5_file(config_path) != md5_file(temp_config);
-    if (!save_config_file(temp_config, config_path)) {
-        remove_file(backup_path);
-        exit(1);
-    }
-
-    if (!changed) {
-        remove_file(backup_path);
-        print("0\n");
-        return;
-    }
-
-    print("1\t", backup_path, "\n");
-}
-
-function restore_dns_config(backup_path) {
-    let config_path = option(uci_settings(), "config_path", "");
-    if (config_path == "" || !file_exists(backup_path))
-        return false;
-    return command_success_from_args([ "mv", "-f", backup_path, config_path ]);
-}
-
 function init_config(populate_nft, caches_prepared, no_refresh, prepared_deferred_sections) {
     let settings = uci_settings();
     let config_path = option(settings, "config_path", "");
@@ -864,10 +787,6 @@ else if (mode == "check-config-fixture") {
 }
 else if (mode == "generator-failure-reason-fixture")
     print(generator_failure_reason(ARGV[1] || "", int(ARGV[2] || "1")), "\n");
-else if (mode == "patch-dns-config")
-    patch_dns_config(ARGV[1] || "");
-else if (mode == "restore-dns-config")
-    exit(restore_dns_config(ARGV[1] || "") ? 0 : 1);
 else if (mode == "managed-service-installed")
     exit(managed_service_installed() ? 0 : 1);
 else if (mode == "remove-managed-service-script")

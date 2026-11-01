@@ -592,12 +592,8 @@ prefer_ipv6
 9.9.9.9
 [settings.bootstrap_dns_server]
 1.0.0.1
-[settings.dns_check_interval]
-10s
-[settings.dns_recovery_check_interval]
-60s
-[settings.dns_check_timeout]
-2s
+[settings.dns_query_timeout]
+500ms
 [settings.dns_detour_enabled]
 0
 [settings.dns_rewrite_ttl]

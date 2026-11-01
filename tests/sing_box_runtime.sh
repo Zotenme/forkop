@@ -1299,15 +1299,6 @@ assert(!contains(matchers.route.rules[dns_leftover_index].inbound, "tproxy-in"),
 for (let i = 0; i < dns_leftover_index; i++)
     assert(matchers.route.rules[i].action != "route", "non-DNS traffic on DNS inbounds is rejected before any route rule");
 assert(dns_server(matchers, r => r.tag == "dnsmasq-server" && r.type == "udp" && r.server == "127.0.0.1" && r.server_port == 53) != null, "source-aware DNS uses the existing dnsmasq instance");
-let bypass_dnsmasq = dns_rule(matchers, r =>
-    r.type == "logical" && r.server == "dnsmasq-server" &&
-    length(r.rules || []) == 2 && contains(r.rules[0].domain_suffix, "example.org"));
-assert(bypass_dnsmasq != null, "filtered bypass probes dnsmasq before real DNS fallback");
-assert(contains(bypass_dnsmasq.rules[0].inbound, "source-dns-in"), "filtered bypass DNS is limited to source-aware DNS clients");
-assert(contains(bypass_dnsmasq.rules[0].source_ip_cidr, "10.0.0.3/32"), "filtered bypass DNS keeps the client source");
-assert(bypass_dnsmasq.rules[1].invert === true && contains(bypass_dnsmasq.rules[1].ip_cidr, "198.18.0.0/15") && contains(bypass_dnsmasq.rules[1].ip_cidr, "fc00::/18"), "filtered bypass rejects nested FakeIP answers");
-assert(bypass_dnsmasq.rules[1].match_response == null, "sing-box before 1.14 keeps the legacy address filter");
-assert(matchers.dns.independent_cache === true, "sing-box before 1.14 keeps independent DNS cache enabled");
 let matchers_114 = cfg("matchers-1.14");
 assert(!exists(matchers_114.dns, "independent_cache"), "sing-box 1.14 config omits the deprecated independent_cache option");
 let bypass_evaluate_index = dns_rule_index(matchers_114, r =>
@@ -1338,7 +1329,7 @@ let source_dns_fallback = dns_rule(matchers, r =>
     r.server == "dnsmasq-server" && r.type == null && r.domain == null &&
     r.domain_suffix == null && r.rule_set == null);
 assert(source_dns_fallback != null && contains(source_dns_fallback.source_ip_cidr, "10.0.0.3/32") && contains(source_dns_fallback.source_ip_cidr, "10.0.0.2/32") && contains(source_dns_fallback.source_ip_cidr, "2001:db8::2/128"), "unmatched source-aware DNS returns through dnsmasq");
-let bypass_probe_index = dns_rule_index(matchers, r => r.type == "logical" && r.server == "dnsmasq-server" && length(r.rules || []) > 0 && contains(r.rules[0].domain_suffix, "example.org"));
+let bypass_probe_index = dns_rule_index(matchers, r => r.action == "evaluate" && r.server == "dnsmasq-server" && contains(r.domain_suffix, "example.org"));
 let bypass_real_index = dns_rule_index(matchers, r => r.server == "dns-server" && contains(r.domain_suffix, "example.org") && contains(r.source_ip_cidr, "10.0.0.3/32"));
 let proxy_below_bypass_index = dns_rule_index(matchers, r => r.server == "fakeip-server" && contains(r.domain_suffix, "example.org") && r.source_ip_cidr == null);
 assert(bypass_probe_index >= 0 && bypass_real_index > bypass_probe_index && proxy_below_bypass_index > bypass_real_index, "source-aware bypass keeps its section priority over lower proxy DNS");
@@ -1441,9 +1432,6 @@ assert(inbound(download, "service-mixed-in") != null, "service mixed inbound");
 assert(route_rule(download, r => r.inbound == "service-mixed-in" && r.outbound == "proxy-out") != null, "service mixed route");
 assert(inbound(download, "service-components-in") != null, "components service mixed inbound");
 assert(route_rule(download, r => r.inbound == "service-components-in" && r.outbound == "components_proxy-out") != null, "components service mixed route");
-assert(ruleset(download, "proxy-discord-community-ruleset").download_detour == "proxy-out", "download_detour on community ruleset");
-assert(ruleset_url(download, "https://example.com/rules.srs").download_detour == "proxy-out", "download_detour on custom remote ruleset");
-assert(download.http_clients == null && download.route.default_http_client == null, "sing-box before 1.14 config has no http_clients");
 
 function http_client(config, tag) {
     for (let item in config.http_clients || [])
@@ -1471,14 +1459,14 @@ let fully = cfg("fully-routed");
 assert(route_rule(fully, r => r.outbound == "bypass-out" && contains(r.inbound, "tproxy-in") && contains(r.inbound, "tproxy6-in") && contains(r.source_ip_cidr, "192.168.1.20/32") && contains(r.source_ip_cidr, "192.168.1.30/32") && contains(r.source_ip_cidr, "2001:db8::20/128")) != null, "fully routed bypass IP route");
 assert(route_rule(fully, r => r.outbound == "proxy-out" && contains(r.source_ip_cidr, "192.168.1.40/32")) != null, "fully routed proxy IP route");
 let fully_bypass_dns = dns_rule(fully, r =>
-    r.type == "logical" && r.server == "dnsmasq-server" &&
-    length(r.rules || []) == 2 && contains(r.rules[0].source_ip_cidr, "192.168.1.20/32") &&
-    r.rules[0].domain == null && r.rules[0].domain_suffix == null && r.rules[0].rule_set == null);
+    r.action == "evaluate" && r.server == "dnsmasq-server" &&
+    contains(r.source_ip_cidr, "192.168.1.20/32") &&
+    r.domain == null && r.domain_suffix == null && r.rule_set == null);
 assert(fully_bypass_dns != null, "fully routed bypass rejects FakeIP for every domain");
 assert(dns_rule(fully, r => r.server == "dns-server" && contains(r.source_ip_cidr, "192.168.1.20/32") && contains(r.query_type, "A")) != null, "fully routed bypass falls back to real DNS");
-assert(dns_rule(fully, r => r.type == "logical" && r.server == "dnsmasq-server" && length(r.rules || []) > 0 && contains(r.rules[0].source_ip_cidr, "192.168.1.40/32")) == null, "fully routed proxy keeps normal FakeIP policy");
+assert(dns_rule(fully, r => r.action == "evaluate" && r.server == "dnsmasq-server" && contains(r.source_ip_cidr, "192.168.1.40/32")) == null, "fully routed proxy keeps normal FakeIP policy");
 let higher_proxy_dns_index = dns_rule_index(fully, r => r.server == "fakeip-server" && contains(r.domain_suffix, "forced-higher.test"));
-let forced_bypass_dns_index = dns_rule_index(fully, r => r.type == "logical" && r.server == "dnsmasq-server" && length(r.rules || []) > 0 && contains(r.rules[0].source_ip_cidr, "192.168.1.20/32"));
+let forced_bypass_dns_index = dns_rule_index(fully, r => r.action == "evaluate" && r.server == "dnsmasq-server" && contains(r.source_ip_cidr, "192.168.1.20/32"));
 let lower_proxy_dns_index = dns_rule_index(fully, r => r.server == "fakeip-server" && contains(r.domain_suffix, "forced-lower.test"));
 assert(higher_proxy_dns_index >= 0 && forced_bypass_dns_index > higher_proxy_dns_index && lower_proxy_dns_index > forced_bypass_dns_index, "forced bypass stays at its section priority in DNS rules");
 let higher_proxy_route_index = route_rule_index(fully, r => r.outbound == "proxy_high-out" && contains(r.domain_suffix, "forced-higher.test"));

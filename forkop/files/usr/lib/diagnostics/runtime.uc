@@ -1304,46 +1304,26 @@ function dns_check_router_resolver_available(domain) {
     return false;
 }
 
-function dns_check_timeout_seconds(value) {
-    let rest = as_string(value);
-    let milliseconds = 0.0;
-    let units = { ns: 0.000001, us: 0.001, ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000 };
-    while (rest != "") {
-        let matched = match(rest, /^([0-9]+(\.[0-9]+)?)(ns|us|ms|s|m|h|d)/);
-        if (!matched)
-            return 2;
-        milliseconds += (matched[1] * 1) * units[matched[3]];
-        rest = substr(rest, length(matched[0]));
-    }
-    return milliseconds > 0 ? int((milliseconds + 999) / 1000) : 2;
-}
-
 function check_dns_available() {
     let cfg = settings();
     let dns_type = option(cfg, "dns_type", "");
-    let active = runtime_dns.active_values(cfg);
-    let dns_server = active.main;
-    let bootstrap_dns_server = active.bootstrap;
+    let main_servers = runtime_dns.server_list(cfg, "dns_server", "77.88.8.8");
+    let bootstrap_servers = runtime_dns.server_list(cfg, "bootstrap_dns_server", "77.88.8.8");
+    let dns_server = main_servers[0];
+    let bootstrap_dns_server = bootstrap_servers[0];
     let dont_touch_dhcp = bool_option(cfg, "dont_touch_dhcp", false) ? 1 : 0;
     let domain = "example.com";
-    let timeout_seconds = dns_check_timeout_seconds(option(cfg, "dns_check_timeout", "2s"));
+    let timeout_seconds = 2;
     let dns_status = 0;
     let dns_on_router = 0;
     let bootstrap_dns_status = 0;
     let dhcp_config_status = 1;
 
-    let active_dns_args = [ "dig" ];
-    if (runtime_dns.failover_enabled(cfg)) {
-        push(active_dns_args, "-p");
-        push(active_dns_args, as_string(runtime_dns.health_port("active", 0)));
-    }
-    push(active_dns_args, "@" + SB_DNS_INBOUND_ADDRESS);
-    push(active_dns_args, domain);
-    push(active_dns_args, "A");
-    push(active_dns_args, "+short");
-    push(active_dns_args, "+timeout=" + as_string(timeout_seconds));
-    push(active_dns_args, "+tries=1");
-    for (let line in split(command_output_from_args(active_dns_args), "\n"))
+    // The query walks the configured servers the way any client query does.
+    for (let line in split(command_output_from_args([
+        "dig", "@" + SB_DNS_INBOUND_ADDRESS, domain, "A", "+short",
+        "+timeout=" + as_string(timeout_seconds), "+tries=1"
+    ]), "\n"))
         if (valid_ipv4(trim(as_string(line)))) {
             dns_status = 1;
             break;
@@ -1355,26 +1335,11 @@ function check_dns_available() {
     let dns_server_host = url_host(dns_server);
     if (dns_server_host == "")
         dns_server_host = dns_server;
-    if (bootstrap_dns_server != "") {
-        if (length(active.state.bootstrap_servers) > 1) {
-            for (let line in split(command_output_from_args([
-                "dig", "-p", as_string(runtime_dns.health_port("bootstrap", active.state.bootstrap_index)),
-                "@" + runtime_dns.DNS_HEALTH_ADDRESS, domain, "A", "+short",
-                "+timeout=" + as_string(timeout_seconds), "+tries=1"
-            ]), "\n"))
-                if (valid_ipv4(trim(as_string(line)))) {
-                    bootstrap_dns_status = 1;
-                    break;
-                }
-        }
-        else {
-            let bootstrap_check_domain = domain;
-            if (dns_server_host != "" && !valid_ipv4(dns_server_host))
-                bootstrap_check_domain = dns_server_host;
-            if (dns_check_resolve_host(bootstrap_check_domain, bootstrap_dns_server, timeout_seconds) != "")
-                bootstrap_dns_status = 1;
-        }
-    }
+    let bootstrap_check_domain = dns_server_host != "" && !valid_ipv4(dns_server_host)
+        ? dns_server_host
+        : domain;
+    if (dns_check_resolve_host(bootstrap_check_domain, bootstrap_dns_server, timeout_seconds) != "")
+        bootstrap_dns_status = 1;
 
     if (!module_success(DNS_APPLY_UC, [ "default-config-complete" ]))
         dhcp_config_status = 0;
@@ -1383,13 +1348,11 @@ function check_dns_available() {
     write_json({
         dns_type,
         dns_server: display_dns_server,
-        dns_server_index: active.state.main_index,
-        dns_server_count: length(active.state.main_servers),
+        dns_server_count: length(main_servers),
         dns_status,
         dns_on_router,
         bootstrap_dns_server,
-        bootstrap_dns_server_index: active.state.bootstrap_index,
-        bootstrap_dns_server_count: length(active.state.bootstrap_servers),
+        bootstrap_dns_server_count: length(bootstrap_servers),
         bootstrap_dns_status,
         dhcp_config_status,
         dont_touch_dhcp

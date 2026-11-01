@@ -378,7 +378,7 @@ function createDnsContent(section, capabilities) {
     "dns_server",
     _("DNS Servers"),
     _(
-      "Main DNS server. If multiple servers are selected, a timeout switches to a backup.",
+      "Servers are asked in order for every query. The next one is asked when a server does not answer in time, or answers with an error, a non-existent domain or a blocking address 0.0.0.0.",
     ),
   );
   configureDnsList(dnsOption, main.DNS_SERVER_OPTIONS, "77.88.8.8");
@@ -388,7 +388,7 @@ function createDnsContent(section, capabilities) {
     "bootstrap_dns_server",
     _("Bootstrap DNS Servers"),
     _(
-      "DNS server used to obtain IP addresses for upstream DNS and proxies. If multiple servers are selected, a timeout switches to a backup.",
+      "DNS server used to obtain IP addresses for upstream DNS and proxies. With sing-box-extended, the next one is asked when a server does not answer in time.",
     ),
   );
   configureDnsList(
@@ -406,29 +406,13 @@ function createDnsContent(section, capabilities) {
 
   o = section.option(
     form.Value,
-    "dns_check_interval",
-    _("DNS Check Interval"),
-    _("How often to check the active DNS servers."),
-  );
-  configureDnsDuration(o, "10s", dnsOption, bootstrapOption);
-
-  o = section.option(
-    form.Value,
-    "dns_recovery_check_interval",
-    _("Higher-priority DNS Check"),
-    _("How often to check whether a higher-priority DNS server has recovered."),
-  );
-  configureDnsDuration(o, "60s", dnsOption, bootstrapOption);
-
-  o = section.option(
-    form.Value,
-    "dns_check_timeout",
-    _("DNS Unavailability Timeout"),
+    "dns_query_timeout",
+    _("DNS Server Timeout"),
     _(
-      "Maximum time to wait for example.com to resolve during a DNS health check.",
+      "How long to wait for a DNS server before asking the next one in the list, for example 500ms or 1s.",
     ),
   );
-  configureDnsDuration(o, "2s", dnsOption, bootstrapOption);
+  configureDnsDuration(o, "500ms", dnsOption, bootstrapOption);
 
   o = section.option(
     form.Value,

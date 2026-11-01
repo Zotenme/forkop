@@ -61,9 +61,7 @@ cat >"$WORK_DIR/valid.json" <<'JSON'
     "dns_type": "doh",
     "dns_server": [ "dns.google/dns-query", "cloudflare-dns.com/dns-query" ],
     "bootstrap_dns_server": [ "1.1.1.1", "8.8.8.8" ],
-    "dns_check_interval": "10s",
-    "dns_recovery_check_interval": "60s",
-    "dns_check_timeout": "2s",
+    "dns_query_timeout": "500ms",
     "dns_strategy": "prefer_ipv6",
     "dns_detour_enabled": "1",
     "dns_detour_section": "proxy",
@@ -164,12 +162,12 @@ cat >"$WORK_DIR/bad-dns-duration.json" <<'JSON'
     ".type": "settings",
     "dns_server": [ "1.1.1.1", "8.8.8.8" ],
     "bootstrap_dns_server": [ "77.88.8.8" ],
-    "dns_check_interval": "ten seconds"
+    "dns_query_timeout": "half a second"
   },
   "section": []
 }
 JSON
-assert_rejects "bad DNS interval" "$WORK_DIR/bad-dns-duration.json" "settings.dns_check_interval"
+assert_rejects "bad DNS timeout" "$WORK_DIR/bad-dns-duration.json" "settings.dns_query_timeout"
 
 cat >"$WORK_DIR/bad-dns-server.json" <<'JSON'
 {

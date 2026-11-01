@@ -67,9 +67,8 @@ awk '
   in_restart && /status = start_impl\(\);/ { saw_start_impl = 1 }
   in_restart && /dnsmasq_configure\(true\)/ { duplicated_dns = 1 }
   in_restart && /write-current-reload-state-clean/ { duplicated_state = 1 }
-  in_restart && /DNS_FAILOVER_UC.*start-runtime/ { duplicated_failover = 1 }
   in_restart && /^}/ { done = 1; exit }
-  END { exit done && saw_start_impl && !duplicated_dns && !duplicated_state && !duplicated_failover ? 0 : 1 }
+  END { exit done && saw_start_impl && !duplicated_dns && !duplicated_state ? 0 : 1 }
 ' "$LIFECYCLE_UC" ||
   fail "reload fallback restart must reuse the complete start_impl path without duplicating finalization"
 require_pattern 'function abort_reload(status, runtime_changed)' \

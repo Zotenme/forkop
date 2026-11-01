@@ -21,7 +21,6 @@ let fixture_uci_data = null;
 let runtime_settings_cache = null;
 let runtime_ruleset_folder = runtime_constants.TMP_RULESET_FOLDER;
 let runtime_supports_xhttp = true;
-let runtime_sing_box_version = "";
 
 const DEFAULT_HTTP_CLIENT_TAG = "direct-http-client";
 
@@ -409,15 +408,6 @@ function cli_bool(value) {
     return value === true || value == "1" || value == "true" || value == "yes" || value == "on";
 }
 
-function sing_box_at_least(major, minor) {
-    let parts = match(runtime_sing_box_version, /^v?([0-9]+)\.([0-9]+)/);
-    if (!parts)
-        return false;
-    let current_major = int(parts[1], 10);
-    let current_minor = int(parts[2], 10);
-    return current_major > major || (current_major == major && current_minor >= minor);
-}
-
 function tproxy_inbound_matcher() {
     return [ runtime_constants.TPROXY_INBOUND_TAG, runtime_constants.TPROXY_INBOUND6_TAG ];
 }
@@ -430,13 +420,11 @@ function base_config(settings, service_address, runtime_context) {
     let log_level = option(settings, "log_level", "warn");
     let rewrite_ttl = int_option(settings, "dns_rewrite_ttl", "60");
     let cache_path = option(settings, "cache_path", "/tmp/sing-box/cache.db");
-    let dns_config = runtime_dns.config(settings);
+    let dns_config = runtime_dns.config(settings, { fallback_server: runtime_supports_xhttp });
     if (dns_config.unsupported)
         runtime_generate_unsupported(dns_config.unsupported);
 
     let dns_rules = [];
-    for (let rule in dns_config.rules)
-        push(dns_rules, rule);
     for (let rule in [
         { action: "reject", query_type: "HTTPS" },
         { action: "reject", domain_suffix: "use-application-dns.net" },
@@ -467,10 +455,8 @@ function base_config(settings, service_address, runtime_context) {
     ];
     if (runtime_context.source_aware_dns)
         push(inbounds, { type: "direct", tag: runtime_constants.SOURCE_DNS_INBOUND_TAG, listen: runtime_constants.SOURCE_DNS_INBOUND_ADDRESS, listen_port: runtime_constants.SOURCE_DNS_INBOUND_PORT });
-    for (let inbound in dns_config.inbounds)
-        push(inbounds, inbound);
-
-    runtime_context.dns_health_inbounds = dns_config.sniff_inbounds;
+    runtime_context.dns_chain = dns_config.chain;
+    runtime_context.dns_query_timeout = dns_config.timeout;
     runtime_context.default_domain_resolver = runtime_dns.default_domain_resolver(settings);
 
     let dns = {
@@ -479,9 +465,6 @@ function base_config(settings, service_address, runtime_context) {
         final: runtime_constants.DNS_SERVER_TAG,
         strategy: option(settings, "dns_strategy", "prefer_ipv4")
     };
-    // sing-box 1.14 always keeps a separate cache per server and deprecates the option.
-    if (!sing_box_at_least(1, 14))
-        dns.independent_cache = true;
 
     return {
         log: {
@@ -2508,35 +2491,20 @@ function add_source_aware_bypass_dns_rules(config, matchers, rewrite_ttl) {
 
     // sing-box 1.14 rejects legacy address filter fields next to query_type rules,
     // so the dnsmasq answer is evaluated first and returned unless it is a FakeIP.
-    if (sing_box_at_least(1, 14)) {
-        let evaluate = copy_dns_matchers(matchers);
-        evaluate.action = "evaluate";
-        evaluate.server = runtime_constants.DNSMASQ_DNS_SERVER_TAG;
-        evaluate.rewrite_ttl = rewrite_ttl;
-        push_dns_matcher_rule(config, evaluate);
-        push_dns_matcher_rule(config, {
-            type: "logical",
-            mode: "and",
-            rules: [
-                copy_dns_matchers(matchers),
-                { match_response: true, ip_cidr: fakeip_ranges, invert: true }
-            ],
-            action: "respond"
-        });
-    }
-    else {
-        push_dns_matcher_rule(config, {
-            type: "logical",
-            mode: "and",
-            rules: [
-                copy_dns_matchers(matchers),
-                { ip_cidr: fakeip_ranges, invert: true }
-            ],
-            action: "route",
-            server: runtime_constants.DNSMASQ_DNS_SERVER_TAG,
-            rewrite_ttl
-        });
-    }
+    let evaluate = copy_dns_matchers(matchers);
+    evaluate.action = "evaluate";
+    evaluate.server = runtime_constants.DNSMASQ_DNS_SERVER_TAG;
+    evaluate.rewrite_ttl = rewrite_ttl;
+    push_dns_matcher_rule(config, evaluate);
+    push_dns_matcher_rule(config, {
+        type: "logical",
+        mode: "and",
+        rules: [
+            copy_dns_matchers(matchers),
+            { match_response: true, ip_cidr: fakeip_ranges, invert: true }
+        ],
+        action: "respond"
+    });
 
     let fallback = copy_dns_matchers(matchers);
     fallback.action = "route";
@@ -3045,9 +3013,6 @@ function add_server_routes(config, servers, sections) {
 // The default client has no detour: it dials directly with the route defaults,
 // like direct-out, which cannot be a detour target because it is empty.
 function add_http_clients(config) {
-    if (!sing_box_at_least(1, 14))
-        return;
-
     let clients = [ { tag: DEFAULT_HTTP_CLIENT_TAG } ];
     let registered = { [DEFAULT_HTTP_CLIENT_TAG]: true };
     for (let rule_set in array_or_empty(config.route.rule_set)) {
@@ -3073,7 +3038,6 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
     runtime_supports_xhttp = supports_xhttp == null || as_string(supports_xhttp) == ""
         ? true
         : cli_bool(supports_xhttp);
-    runtime_sing_box_version = trim(as_string(sing_box_version));
     let cursor = uci_cursor();
     cursor.load(CONFIG_NAME);
     runtime_settings_cache = object_or_empty(cursor.get_all(CONFIG_NAME, "settings"));
@@ -3085,10 +3049,11 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
         runtime_generate_unsupported("no enabled sections");
 
     let source_aware_dns = source_aware_dns_sources(sections);
-    let config = base_config(settings, service_address, {
+    let runtime_context = {
         mwan3_active: cli_bool(mwan3_active),
         source_aware_dns: length(source_aware_dns) > 0
-    });
+    };
+    let config = base_config(settings, service_address, runtime_context);
     add_source_aware_dns_support(config, source_aware_dns);
     let taken = reserved_runtime_tag_set(config.outbounds);
     reserve_section_outbound_tags(sections, taken);
@@ -3105,6 +3070,7 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
     for (let section in sections)
         add_mixed_proxy_for_section(config, section, service_address);
 
+    runtime_dns.expand_chain(config.dns, runtime_context.dns_chain, runtime_context.dns_query_timeout);
     add_http_clients(config);
     assert_unique_outbound_tags(config);
     strip_internal_fields(config);
