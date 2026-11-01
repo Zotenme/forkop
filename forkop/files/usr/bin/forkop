@@ -117,6 +117,8 @@ function show_help() {
     print("    component_updates_if_due Check installed components for updates when due\n");
     print("    component_update_check_cache Get cached component update check results\n");
     print("    check_dns_available     Check DNS server availability\n");
+    print("    check_dns_server <server> [protocols] [bootstrap]\n");
+    print("                            Check one DNS server over UDP, DoT and DoH in JSON format\n");
     print("    global_check            Run global system check\n");
     print("    validate_nfqws_strategy_json\n");
     print("                            Validate an NFQWS strategy and print JSON result\n");
@@ -187,6 +189,7 @@ function command_spec(command) {
         component_updates_if_due: [ "components/updates.uc", "component-updates-if-due", 0 ],
         component_update_check_cache: [ "components/updates.uc", "component-update-check-cache", 0 ],
         check_dns_available: [ "diagnostics/runtime.uc", "check-dns-available", 0 ],
+        check_dns_server: [ "dns/check.uc", "check", 3 ],
         global_check: [ "diagnostics/runtime.uc", "global-check", 2 ],
         validate_nfqws_strategy_json: [ "diagnostics/runtime.uc", "validate-nfqws-strategy-json", 1 ],
         validate_nfqws2_strategy_json: [ "diagnostics/runtime.uc", "validate-nfqws2-strategy-json", 1 ],

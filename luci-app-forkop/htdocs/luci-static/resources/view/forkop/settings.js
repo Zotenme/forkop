@@ -1,7 +1,10 @@
 "use strict";
 "require form";
+"require fs";
 "require uci";
 "require baseclass";
+"require dom";
+"require ui";
 "require tools.widgets as widgets";
 "require view.forkop.main as main";
 
@@ -153,6 +156,183 @@ function configureDnsDuration(
   configureDnsFailoverVisibility(option, dnsOption, bootstrapOption);
 }
 
+const DNS_CHECK_PROTOCOLS = ["udp", "dot", "doh"];
+
+function dnsCheckErrorText(error) {
+  switch (error) {
+    case "timeout":
+      return _("timeout");
+    case "no_response":
+      return _("no response");
+    case "host_not_found":
+      return _("host not found");
+    case "empty_answer":
+      return _("empty answer");
+    case "check_failed":
+      return _("check failed");
+    default:
+      return `${error || _("error")}`.toUpperCase();
+  }
+}
+
+function dnsCheckCell(result) {
+  if (!result) {
+    return E("span", {}, "—");
+  }
+  if (result.pending) {
+    return E("span", { class: "spinning" }, _("Checking…"));
+  }
+  return result.ok
+    ? E(
+        "span",
+        { style: "color:var(--success-color-medium, green)" },
+        result.ms != null ? `✓ ${result.ms} ${_("ms")}` : "✓",
+      )
+    : E(
+        "span",
+        { style: "color:var(--error-color-medium, red)" },
+        `✗ ${dnsCheckErrorText(result.error)}`,
+      );
+}
+
+function dnsCheckServerLabel(row) {
+  const nodes = [E("strong", {}, row.server)];
+  if (row.bootstrap) {
+    nodes.push(E("br"), E("small", {}, _("Bootstrap DNS")));
+  }
+  if (row.response?.bootstrap_ok === true) {
+    nodes.push(
+      E("br"),
+      E(
+        "small",
+        {},
+        _("Address via bootstrap: %s").format(row.response.resolved),
+      ),
+    );
+  } else if (row.response?.bootstrap_ok === false) {
+    nodes.push(
+      E("br"),
+      E(
+        "small",
+        { style: "color:var(--error-color-medium, red)" },
+        _("Bootstrap DNS could not resolve this name"),
+      ),
+    );
+  }
+  return nodes;
+}
+
+function renderDnsCheckTable(container, rows, dnsType) {
+  const header = E("tr", { class: "tr table-titles" }, [
+    E("th", { class: "th" }, _("Server")),
+    ...DNS_CHECK_PROTOCOLS.map((protocol) =>
+      E(
+        "th",
+        { class: "th" },
+        protocol === dnsType
+          ? E("strong", {}, `${protocol.toUpperCase()} ★`)
+          : protocol.toUpperCase(),
+      ),
+    ),
+  ]);
+  const body = rows.map((row) =>
+    E("tr", { class: "tr" }, [
+      E("td", { class: "td" }, dnsCheckServerLabel(row)),
+      ...DNS_CHECK_PROTOCOLS.map((protocol) =>
+        E("td", { class: "td" }, dnsCheckCell(row.results[protocol])),
+      ),
+    ]),
+  );
+  dom.content(container, E("table", { class: "table" }, [header, ...body]));
+}
+
+function runDnsServerCheck(server, protocols, bootstrap) {
+  return fs
+    .exec("/usr/bin/forkop", [
+      "check_dns_server",
+      server,
+      protocols.join(","),
+      bootstrap || "",
+    ])
+    .then((response) => {
+      const data = JSON.parse(response.stdout || "{}");
+      if (!data.success) {
+        throw new Error(data.error || response.stderr || "");
+      }
+      return data;
+    });
+}
+
+// Checks what is typed in the form, so a server can be tried before it is saved.
+function checkDnsServers(container, section_id, options) {
+  const dnsType = options.typeOption.formvalue(section_id) || "udp";
+  const bootstrapServers = optionListValues(
+    options.bootstrapOption,
+    section_id,
+  );
+  const rows = [
+    ...optionListValues(options.dnsOption, section_id).map((server) => ({
+      server,
+      protocols: DNS_CHECK_PROTOCOLS,
+    })),
+    // Bootstrap servers are always queried over plain DNS.
+    ...bootstrapServers.map((server) => ({
+      server,
+      bootstrap: true,
+      protocols: ["udp"],
+    })),
+  ].map((row) => ({
+    ...row,
+    results: Object.fromEntries(
+      row.protocols.map((protocol) => [protocol, { pending: true }]),
+    ),
+  }));
+
+  if (!rows.length) {
+    dom.content(container, E("em", {}, _("Add at least one DNS server")));
+    return Promise.resolve();
+  }
+
+  const render = () => renderDnsCheckTable(container, rows, dnsType);
+  render();
+
+  return Promise.all(
+    rows.map((row) =>
+      runDnsServerCheck(row.server, row.protocols, bootstrapServers[0])
+        .then((response) => {
+          row.response = response;
+          row.results = response.results || {};
+        })
+        .catch(() => {
+          row.results = Object.fromEntries(
+            row.protocols.map((protocol) => [
+              protocol,
+              { ok: false, error: "check_failed" },
+            ]),
+          );
+        })
+        .finally(render),
+    ),
+  );
+}
+
+function configureDnsCheck(option, options) {
+  option.renderWidget = function (section_id) {
+    const results = E("div", { style: "margin-top:.5em" });
+    const button = E(
+      "button",
+      {
+        class: "cbi-button cbi-button-action",
+        click: ui.createHandlerFn(this, () =>
+          checkDnsServers(results, section_id, options),
+        ),
+      },
+      _("Check servers"),
+    );
+    return E("div", {}, [button, results]);
+  };
+}
+
 function createDnsContent(section, capabilities) {
   let o = section.option(
     form.ListValue,
@@ -189,6 +369,20 @@ function createDnsContent(section, capabilities) {
     main.BOOTSTRAP_DNS_SERVER_OPTIONS,
     "77.88.8.8",
   );
+
+  const checkOption = section.option(
+    form.DummyValue,
+    "_dns_check",
+    _("Server check"),
+    _(
+      "Checks the servers above from the router, before saving. The column of the selected protocol is marked with ★.",
+    ),
+  );
+  configureDnsCheck(checkOption, {
+    typeOption: o,
+    dnsOption,
+    bootstrapOption,
+  });
 
   o = section.option(
     form.Value,

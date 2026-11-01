@@ -107,6 +107,9 @@ msgstr "Дополнительно показывать серверы по пр
 msgid "Address"
 msgstr "Адрес"
 
+msgid "Address via bootstrap: %s"
+msgstr "Адрес через bootstrap: %s"
+
 msgid "Advertise exit node"
 msgstr "Анонсировать exit node"
 
@@ -191,6 +194,9 @@ msgstr "Backend-проверка завершилась ошибкой: %s"
 msgid "Bootstrap DNS"
 msgstr "Bootstrap DNS"
 
+msgid "Bootstrap DNS could not resolve this name"
+msgstr "Bootstrap DNS не смог найти адрес этого имени"
+
 msgid "Bootstrap DNS Servers"
 msgstr "Bootstrap DNS-серверы"
 
@@ -269,8 +275,14 @@ msgstr "Путь к сертификату"
 msgid "Certificate pin is unavailable. Apply or restart the server to generate the default certificate, then open this dialog again."
 msgstr "Пин сертификата недоступен. Примените или перезапустите сервер, чтобы сгенерировать дефолтный сертификат, затем откройте это окно снова."
 
+msgid "check failed"
+msgstr "ошибка проверки"
+
 msgid "Check interval"
 msgstr "Интервал проверки"
+
+msgid "Check servers"
+msgstr "Проверить серверы"
 
 msgid "Check timeout after which the server is considered dead"
 msgstr "Таймаут проверки, после которого сервер считается мёртвым"
@@ -284,6 +296,9 @@ msgstr "URL проверки"
 msgid "Checking, please wait"
 msgstr "Проверяем, пожалуйста подождите"
 
+msgid "Checking…"
+msgstr "Проверка…"
+
 msgid "checks"
 msgstr "проверки"
 
@@ -295,6 +310,9 @@ msgstr "Проверки пройдены"
 
 msgid "Checks passed with manual DHCP"
 msgstr "Проверки пройдены с ручным DHCP"
+
+msgid "Checks the servers above from the router, before saving. The column of the selected protocol is marked with ★."
+msgstr "Проверяет серверы из полей выше прямо с роутера, ещё до сохранения. Колонка выбранного протокола отмечена ★."
 
 msgid "CIDR must be between 0 and 32 for IPv4 or 0 and 128 for IPv6"
 msgstr "CIDR должен быть от 0 до 32 для IPv4 или от 0 до 128 для IPv6"
@@ -590,6 +608,9 @@ msgstr "Дублирующееся значение"
 msgid "Edit rule action"
 msgstr "Изменить"
 
+msgid "empty answer"
+msgstr "пустой ответ"
+
 msgid "Enable"
 msgstr "Включить"
 
@@ -646,6 +667,9 @@ msgstr "HWID, который будет отправляться при запр
 
 msgid "Enter the subscription URL"
 msgstr "Введите URL подписки"
+
+msgid "error"
+msgstr "ошибка"
 
 msgid "Exclude by proxy parameters"
 msgstr "Исключить по параметрам прокси"
@@ -871,6 +895,9 @@ msgstr "Проверка верхних DNS"
 
 msgid "Host"
 msgstr "Хост"
+
+msgid "host not found"
+msgstr "хост не найден"
 
 msgid "How often higher priority levels are checked while a lower level is active"
 msgstr "Как часто проверять верхние уровни приоритета, пока активен нижний уровень"
@@ -1241,6 +1268,9 @@ msgstr "Наблюдаемые интерфейсы"
 msgid "Monitoring"
 msgstr "Мониторинг"
 
+msgid "ms"
+msgstr "мс"
+
 msgid "Must be a number in the range of 0 - 10000"
 msgstr "Должно быть числом в диапазоне 0 - 10000"
 
@@ -1297,6 +1327,9 @@ msgstr "Другие правила маркировки не найдены"
 
 msgid "No public firewall port required"
 msgstr "Публичный порт в firewall не требуется"
+
+msgid "no response"
+msgstr "нет ответа"
 
 msgid "No rules use ByeDPI"
 msgstr "Нет правил, использующих ByeDPI"
@@ -1700,6 +1733,9 @@ msgstr "Selector и URLTest outbound должны содержать непус�
 msgid "Server"
 msgstr "Сервер"
 
+msgid "Server check"
+msgstr "Проверка серверов"
+
 msgid "Server filtering"
 msgstr "Фильтрация серверов"
 
@@ -1981,6 +2017,9 @@ msgstr "Время в секундах для кэширования DNS зап�
 
 msgid "Time skew tolerance"
 msgstr "Допуск расхождения времени"
+
+msgid "timeout"
+msgstr "таймаут"
 
 msgid "tiny"
 msgstr "tiny"
