@@ -14,8 +14,9 @@ ${UpdatesTab.styles}
 ${PartialStyles}
 
 
-/* Hide extra H3 for settings tab */
-#cbi-${FORKOP_CBI_PREFIX}-settings > h3 {
+/* Hide extra H3 for settings and DNS tabs */
+#cbi-${FORKOP_CBI_PREFIX}-settings > h3,
+#cbi-${FORKOP_CBI_PREFIX}-dns > h3 {
     display: none;
 }
 

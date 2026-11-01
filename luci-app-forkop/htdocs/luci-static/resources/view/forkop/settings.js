@@ -153,7 +153,7 @@ function configureDnsDuration(
   configureDnsFailoverVisibility(option, dnsOption, bootstrapOption);
 }
 
-function createSettingsContent(section, capabilities) {
+function createDnsContent(section, capabilities) {
   let o = section.option(
     form.ListValue,
     "dns_type",
@@ -260,8 +260,10 @@ function createSettingsContent(section, capabilities) {
   );
   o.depends("dns_detour_enabled", "1");
   configureDownloadSectionOption(o, "dns_detour_section", capabilities);
+}
 
-  o = section.option(
+function createSettingsContent(section, capabilities) {
+  let o = section.option(
     widgets.DeviceSelect,
     "source_network_interfaces",
     _("Source Network Interface"),
@@ -682,6 +684,7 @@ function createSettingsContent(section, capabilities) {
 }
 
 const EntryPoint = {
+  createDnsContent,
   createSettingsContent,
 };
 

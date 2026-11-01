@@ -13956,8 +13956,9 @@ ${UpdatesTab.styles}
 ${PartialStyles}
 
 
-/* Hide extra H3 for settings tab */
-#cbi-${FORKOP_UCI_PACKAGE}-settings > h3 {
+/* Hide extra H3 for settings and DNS tabs */
+#cbi-${FORKOP_UCI_PACKAGE}-settings > h3,
+#cbi-${FORKOP_UCI_PACKAGE}-dns > h3 {
     display: none;
 }
 

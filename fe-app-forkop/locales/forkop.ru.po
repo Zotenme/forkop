@@ -446,6 +446,9 @@ msgstr "Отключение перехвата несовместимо с acti
 msgid "Display name"
 msgstr "Отображаемое имя"
 
+msgid "DNS"
+msgstr "DNS"
+
 msgid "DNS Check Interval"
 msgstr "Период проверки DNS"
 

@@ -651,6 +651,10 @@ msgstr ""
 msgid "Display name"
 msgstr ""
 
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/forkop.js:423
+msgid "DNS"
+msgstr ""
+
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:196
 msgid "DNS Check Interval"
 msgstr ""

@@ -418,6 +418,16 @@ const EntryPoint = {
     });
     server.createServerContent(serverSection, uiCapabilities);
 
+    // DNS options live in the "settings" UCI section; a separate section type
+    // gives them their own tab, since LuCI names tabs after the section type.
+    const dnsSection = forkopMap.section(form.TypedSection, "dns", _("DNS"));
+    dnsSection.anonymous = true;
+    dnsSection.addremove = false;
+    dnsSection.cfgsections = function () {
+      return ["settings"];
+    };
+    settings.createDnsContent(dnsSection, uiCapabilities);
+
     const settingsSection = forkopMap.section(
       form.TypedSection,
       "settings",
