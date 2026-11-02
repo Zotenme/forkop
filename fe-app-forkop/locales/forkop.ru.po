@@ -68,6 +68,12 @@ msgstr "Добавлять префикс к узлам"
 msgid "Add URLs or local paths to .lst lists containing domains, IP addresses, or CIDR ranges. DNS actions ignore IP entries."
 msgstr "Добавьте URL или локальные пути к спискам .lst с доменами, IP-адресами или CIDR-подсетями. Для действия DNS записи IP игнорируются."
 
+msgid "Add selected"
+msgstr "Добавить выбранные"
+
+msgid "Add selected (%d)"
+msgstr "Добавить выбранные (%d)"
+
 msgid "Add URLs or local paths to .lst lists containing domains and subnets."
 msgstr "Добавьте URL или локальные пути к спискам .lst с доменами и подсетями."
 
@@ -142,6 +148,9 @@ msgstr "Позволяет ограничить список серверов д
 
 msgid "ALPN"
 msgstr "ALPN"
+
+msgid "already added"
+msgstr "уже добавлен"
 
 msgid "Alter ID"
 msgstr "Alter ID"
@@ -263,6 +272,9 @@ msgstr "Не удалось сохранить настройки"
 msgid "Cascade connection"
 msgstr "Каскадное подключение"
 
+msgid "Catalog index is empty"
+msgstr "Список каталога пуст"
+
 msgid "Certificate path"
 msgstr "Путь к сертификату"
 
@@ -301,6 +313,9 @@ msgstr "Проверки пройдены"
 
 msgid "Checks passed with manual DHCP"
 msgstr "Проверки пройдены с ручным DHCP"
+
+msgid "Choose from catalog"
+msgstr "Выбрать из каталога"
 
 msgid "CIDR must be between 0 and 32 for IPv4 or 0 and 128 for IPv6"
 msgstr "CIDR должен быть от 0 до 32 для IPv4 или от 0 до 128 для IPv6"
@@ -713,6 +728,9 @@ msgstr "Не удалось скопировать!"
 msgid "Failed to execute"
 msgstr "Не удалось выполнить"
 
+msgid "Failed to load catalog: %s"
+msgstr "Не удалось загрузить каталог: %s"
+
 msgid "Failed to update subscriptions"
 msgstr "Не удалось обновить подписки"
 
@@ -823,6 +841,9 @@ msgstr "Генерировать HWID из аппаратной информац
 
 msgid "Generated inbound"
 msgstr "Созданный inbound"
+
+msgid "geoip lists are added with subnets enabled."
+msgstr "Списки geoip добавляются с включёнными подсетями."
 
 msgid "Get global check"
 msgstr "Получить глобальную проверку"
@@ -1196,6 +1217,12 @@ msgstr "Порт прослушивания"
 msgid "Listening port"
 msgstr "Слушающий порт"
 
+msgid "Lists found: %d"
+msgstr "Найдено списков: %d"
+
+msgid "Loading catalog…"
+msgstr "Загрузка каталога…"
+
 msgid "Loading client link..."
 msgstr "Загрузка клиентской ссылки..."
 
@@ -1345,6 +1372,9 @@ msgstr "Не отвечает"
 
 msgid "Not running"
 msgstr "Не запущено"
+
+msgid "Nothing found"
+msgstr "Ничего не найдено"
 
 msgid "Obfuscation"
 msgstr "Обфускация"
@@ -1580,6 +1610,9 @@ msgstr "Правила маршрутизации"
 msgid "Routing section"
 msgstr "Секция маршрутизации"
 
+msgid "Rule set catalog"
+msgstr "Каталог наборов правил"
+
 msgid "Rule set must be an HTTP(S) URL or a local .srs / .json path"
 msgstr "Набор правил должен быть HTTP(S) URL или локальным путём .srs / .json"
 
@@ -1618,6 +1651,9 @@ msgstr "Сохранить"
 
 msgid "Search"
 msgstr "Поиск"
+
+msgid "Search, e.g. apple"
+msgstr "Поиск, например apple"
 
 msgid "Secret"
 msgstr "Секрет"
@@ -1696,6 +1732,9 @@ msgstr "Выберите WAN интерфейсы для мониторинга"
 
 msgid "Selected"
 msgstr "Выбран"
+
+msgid "Selected lists are added to the rule sets as regular links and downloaded by the router."
+msgstr "Выбранные списки добавляются в наборы правил обычными ссылками, роутер скачивает их сам."
 
 msgid "Selected section"
 msgstr "Выбранная секция"
@@ -1783,6 +1822,12 @@ msgstr "Показать sing-box конфигурацию"
 
 msgid "Show subscription metadata for this source on the dashboard"
 msgstr "Отображать метаданные этой подписки в дашборде"
+
+msgid "Show variants (@cn, @ads…)"
+msgstr "Показывать варианты (@cn, @ads…)"
+
+msgid "Showing %d of %d lists, refine the search to see the rest"
+msgstr "Показано %d из %d списков, уточните поиск, чтобы увидеть остальные"
 
 msgid "Sing-box autostart disabled"
 msgstr "Автостарт sing-box отключен"

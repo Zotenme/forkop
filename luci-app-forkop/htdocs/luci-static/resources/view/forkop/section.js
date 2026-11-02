@@ -184,6 +184,32 @@ const ZAPRET2_DEFAULT_NFQWS2_OPT =
 const BYEDPI_DEFAULT_CMD_OPTS = "-o 2 --auto=t,r,a,s -d 2";
 const ANNOTATED_TEXTAREA_STYLE_ID = "fkp-annotated-textarea-styles";
 const CONNECTIONS_DYNLIST_STYLE_ID = "fkp-connections-dynlist-styles";
+const RULESET_CATALOG_STYLE_ID = "fkp-ruleset-catalog-styles";
+const RULESET_CATALOG_CACHE_PREFIX = "forkop.rulesetCatalog.";
+const RULESET_CATALOG_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const RULESET_CATALOG_RENDER_LIMIT = 200;
+// The jsDelivr package API lists a GitHub branch in one CORS-enabled request,
+// without the 60 requests/hour limit of the anonymous GitHub API.
+const RULESET_CATALOG_SOURCES = [
+  {
+    id: "geosite",
+    label: "SagerNet geosite",
+    indexUrl:
+      "https://data.jsdelivr.com/v1/packages/gh/SagerNet/sing-geosite@rule-set?structure=flat",
+    baseUrl: "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/",
+    prefix: "geosite-",
+    subnets: false,
+  },
+  {
+    id: "geoip",
+    label: "SagerNet geoip",
+    indexUrl:
+      "https://data.jsdelivr.com/v1/packages/gh/SagerNet/sing-geoip@rule-set?structure=flat",
+    baseUrl: "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/",
+    prefix: "geoip-",
+    subnets: true,
+  },
+];
 const NFQWS_REMOTE_VALIDATION_DEBOUNCE_MS = 500;
 const NFQWS_VALIDATION_COMMAND = "/usr/bin/forkop";
 const nfqwsRemoteValidationCache = new Map();
@@ -6951,6 +6977,458 @@ function writeDnsRulesetReferences(section_id, values) {
   uci.unset(UCI_PACKAGE, section_id, RULE_SET_ITEM_SETTINGS_KEY);
 }
 
+function ensureRulesetCatalogStyles() {
+  if (document.getElementById(RULESET_CATALOG_STYLE_ID)) {
+    return;
+  }
+
+  document.head.appendChild(
+    E(
+      "style",
+      { id: RULESET_CATALOG_STYLE_ID },
+      `
+.fkp-ruleset-catalog-field > .fkp-ruleset-catalog-open {
+  margin-top: 0.5em;
+}
+
+.fkp-ruleset-catalog__toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em 1em;
+  margin-bottom: 0.5em;
+}
+
+.fkp-ruleset-catalog__toolbar > input[type="search"] {
+  flex: 1 1 14em;
+  min-width: 0;
+}
+
+.fkp-ruleset-catalog__status {
+  margin-bottom: 0.5em;
+  opacity: 0.8;
+}
+
+.fkp-ruleset-catalog__list {
+  border: 1px solid var(--border-color-high, currentColor);
+  border-radius: 4px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 0.25em 0;
+}
+
+.fkp-ruleset-catalog__item {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 0.5em;
+  margin: 0;
+  padding: 0.2em 0.75em;
+}
+
+.fkp-ruleset-catalog__item:hover {
+  background: var(--background-color-medium, rgba(127, 127, 127, 0.12));
+}
+
+.fkp-ruleset-catalog__item.is-added {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.fkp-ruleset-catalog__item > small {
+  margin-left: auto;
+}
+`,
+    ),
+  );
+}
+
+function rulesetCatalogEntryName(source, file) {
+  const base = `${file || ""}`.replace(/^\/+/, "");
+  if (!base.startsWith(source.prefix) || !base.endsWith(".srs")) {
+    return "";
+  }
+
+  return base.slice(source.prefix.length, -".srs".length);
+}
+
+function parseRulesetCatalogIndex(source, payload) {
+  const files = payload && Array.isArray(payload.files) ? payload.files : [];
+  const names = new Set();
+
+  files.forEach((file) => {
+    const name = rulesetCatalogEntryName(source, file && file.name);
+    if (name !== "" && !name.includes("/")) {
+      names.add(name);
+    }
+  });
+
+  return [...names].sort();
+}
+
+function rulesetCatalogEntry(source, name) {
+  return {
+    name,
+    url: `${source.baseUrl}${source.prefix}${name}.srs`,
+    subnets: source.subnets,
+  };
+}
+
+function readRulesetCatalogCache(source) {
+  try {
+    const cached = JSON.parse(
+      window.localStorage.getItem(RULESET_CATALOG_CACHE_PREFIX + source.id),
+    );
+    if (cached && Array.isArray(cached.names)) {
+      return cached;
+    }
+  } catch (_error) {}
+
+  return null;
+}
+
+function writeRulesetCatalogCache(source, names) {
+  try {
+    window.localStorage.setItem(
+      RULESET_CATALOG_CACHE_PREFIX + source.id,
+      JSON.stringify({ fetchedAt: Date.now(), names }),
+    );
+  } catch (_error) {}
+}
+
+function loadRulesetCatalog(source) {
+  const cached = readRulesetCatalogCache(source);
+  if (cached && Date.now() - cached.fetchedAt < RULESET_CATALOG_CACHE_TTL_MS) {
+    return Promise.resolve(cached.names);
+  }
+
+  return window
+    .fetch(source.indexUrl, { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    })
+    .then((payload) => {
+      const names = parseRulesetCatalogIndex(source, payload);
+      if (names.length === 0) {
+        throw new Error(_("Catalog index is empty"));
+      }
+      writeRulesetCatalogCache(source, names);
+      return names;
+    })
+    .catch((error) => {
+      // A stale list is still useful: rule set URLs rarely disappear.
+      if (cached) {
+        return cached.names;
+      }
+      throw error;
+    });
+}
+
+function filterRulesetCatalogNames(names, query, showVariants) {
+  const needle = `${query || ""}`.trim().toLowerCase();
+  const matches = names.filter(
+    (name) =>
+      (showVariants || !name.includes("@")) &&
+      (needle === "" || name.includes(needle)),
+  );
+
+  if (needle === "") {
+    return matches;
+  }
+
+  const rank = (name) =>
+    name === needle ? 0 : name.startsWith(needle) ? 1 : 2;
+  return matches.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+
+function renderStackedModalView(title, nodes, renderButtons) {
+  const modal = document.querySelector("#modal_overlay > .modal.cbi-modal");
+  const activeMap = modal ? modal.querySelector(".cbi-map:not(.hidden)") : null;
+  const buttonRow = modal ? modal.querySelector("div.button-row") : null;
+  const heading = modal ? modal.querySelector("h4") : null;
+
+  if (!modal || !activeMap || !buttonRow || !heading) {
+    return null;
+  }
+
+  const titleNode = E("span", title ? ` » ${title}` : "");
+  const originalButtonClass = buttonRow.getAttribute("class") || "";
+  const originalButtonNodes = Array.from(buttonRow.childNodes);
+  let closed = false;
+
+  const close = () => {
+    if (closed) {
+      return;
+    }
+
+    closed = true;
+    if (nodes.parentNode) {
+      nodes.parentNode.removeChild(nodes);
+    }
+    if (titleNode.parentNode) {
+      titleNode.parentNode.removeChild(titleNode);
+    }
+    activeMap.classList.remove("hidden");
+    buttonRow.textContent = "";
+    originalButtonNodes.forEach((node) => buttonRow.appendChild(node));
+    buttonRow.setAttribute("class", originalButtonClass);
+  };
+
+  buttonRow.textContent = "";
+  buttonRow.append(...renderButtons(close));
+  heading.appendChild(titleNode);
+  activeMap.classList.add("hidden");
+  activeMap.parentNode.insertBefore(nodes, activeMap.nextElementSibling);
+
+  return close;
+}
+
+function addRulesetCatalogEntries(section_id, option, entries) {
+  const widget = option.getUIElement(section_id);
+  const current = uniqueDynamicListItems(
+    widget ? widget.getValue() : getCustomRulesetReferences(section_id),
+  );
+  const refs = uniqueDynamicListItems([
+    ...current,
+    ...entries.map((entry) => entry.url),
+  ]);
+  const subnetUrls = entries
+    .filter((entry) => entry.subnets)
+    .map((entry) => entry.url);
+
+  // geoip lists hold only subnets, so they are useless without the
+  // include_subnets flag that the per-item settings modal normally sets.
+  if (subnetUrls.length > 0) {
+    const subnets = new Set(
+      getConfigListValues(section_id, "rule_set_with_subnets").filter((ref) =>
+        refs.includes(ref),
+      ),
+    );
+    subnetUrls.forEach((url) => subnets.add(url));
+    writeListOption(
+      section_id,
+      "rule_set",
+      refs.filter((ref) => !subnets.has(ref)),
+    );
+    writeListOption(section_id, "rule_set_with_subnets", [...subnets]);
+  }
+
+  if (widget) {
+    widget.setValue(refs);
+  }
+}
+
+function showRulesetCatalogModal(section_id, option, settings) {
+  ensureRulesetCatalogStyles();
+
+  const sources = RULESET_CATALOG_SOURCES.filter(
+    (source) => settings.allowSubnets || !source.subnets,
+  );
+  const widget = option.getUIElement(section_id);
+  const added = new Set(
+    widget ? L.toArray(widget.getValue()) : getCustomRulesetReferences(section_id),
+  );
+  const selected = new Map();
+  const loaded = {};
+  let source = sources[0];
+  let addButton;
+
+  const status = E("div", { class: "fkp-ruleset-catalog__status" });
+  const list = E("div", { class: "fkp-ruleset-catalog__list" });
+  const search = E("input", {
+    type: "search",
+    class: "cbi-input-text",
+    placeholder: _("Search, e.g. apple"),
+  });
+  const variants = E("input", { type: "checkbox" });
+  const sourceSelect = E(
+    "select",
+    { class: "cbi-input-select" },
+    sources.map((item) => E("option", { value: item.id }, item.label)),
+  );
+
+  const updateAddButton = () => {
+    if (addButton) {
+      addButton.disabled = selected.size === 0;
+      addButton.textContent =
+        selected.size > 0
+          ? _("Add selected (%d)").format(selected.size)
+          : _("Add selected");
+    }
+  };
+
+  const renderItem = (entry) => {
+    const isAdded = added.has(entry.url);
+    const checkbox = E("input", {
+      type: "checkbox",
+      checked: isAdded || selected.has(entry.url) ? "" : null,
+      disabled: isAdded ? "" : null,
+      change: (ev) => {
+        if (ev.target.checked) {
+          selected.set(entry.url, entry);
+        } else {
+          selected.delete(entry.url);
+        }
+        updateAddButton();
+      },
+    });
+
+    return E(
+      "label",
+      {
+        class: `fkp-ruleset-catalog__item${isAdded ? " is-added" : ""}`,
+        title: entry.url,
+      },
+      [
+        checkbox,
+        E("span", {}, entry.name),
+        isAdded ? E("small", {}, _("already added")) : "",
+      ],
+    );
+  };
+
+  const renderList = () => {
+    const names = loaded[source.id];
+    list.textContent = "";
+    if (!names) {
+      return;
+    }
+
+    const matches = filterRulesetCatalogNames(
+      names,
+      search.value,
+      variants.checked,
+    );
+    matches
+      .slice(0, RULESET_CATALOG_RENDER_LIMIT)
+      .forEach((name) =>
+        list.appendChild(renderItem(rulesetCatalogEntry(source, name))),
+      );
+
+    if (matches.length === 0) {
+      status.textContent = _("Nothing found");
+    } else if (matches.length > RULESET_CATALOG_RENDER_LIMIT) {
+      status.textContent = _(
+        "Showing %d of %d lists, refine the search to see the rest",
+      ).format(RULESET_CATALOG_RENDER_LIMIT, matches.length);
+    } else {
+      status.textContent = _("Lists found: %d").format(matches.length);
+    }
+  };
+
+  const loadSource = () => {
+    const current = source;
+    if (loaded[current.id]) {
+      renderList();
+      return;
+    }
+
+    list.textContent = "";
+    status.textContent = _("Loading catalog…");
+    loadRulesetCatalog(current)
+      .then((names) => {
+        loaded[current.id] = names;
+        if (source === current) {
+          renderList();
+        }
+      })
+      .catch((error) => {
+        if (source === current) {
+          status.textContent = _("Failed to load catalog: %s").format(
+            error && error.message ? error.message : `${error}`,
+          );
+        }
+      });
+  };
+
+  let searchTimer = null;
+  search.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(renderList, 150);
+  });
+  variants.addEventListener("change", renderList);
+  sourceSelect.addEventListener("change", () => {
+    source = sources.find((item) => item.id === sourceSelect.value) || source;
+    loadSource();
+  });
+
+  const nodes = E("div", { class: "cbi-map fkp-ruleset-catalog" }, [
+    E(
+      "div",
+      { class: "cbi-map-descr" },
+      _(
+        "Selected lists are added to the rule sets as regular links and downloaded by the router.",
+      ) +
+        (settings.allowSubnets
+          ? ` ${_("geoip lists are added with subnets enabled.")}`
+          : ""),
+    ),
+    E("div", { class: "fkp-ruleset-catalog__toolbar" }, [
+      sources.length > 1 ? sourceSelect : "",
+      search,
+      E("label", {}, [variants, " ", _("Show variants (@cn, @ads…)")]),
+    ]),
+    status,
+    list,
+  ]);
+
+  const close = renderStackedModalView(
+    _("Rule set catalog"),
+    nodes,
+    (closeView) => [
+      E("button", { class: "btn cbi-button", click: closeView }, _("Close")),
+      " ",
+      (addButton = E(
+        "button",
+        {
+          class: "btn cbi-button cbi-button-positive important",
+          click: () => {
+            addRulesetCatalogEntries(section_id, option, [...selected.values()]);
+            closeView();
+          },
+        },
+        _("Add selected"),
+      )),
+    ],
+  );
+
+  if (!close) {
+    return;
+  }
+
+  updateAddButton();
+  loadSource();
+  search.focus();
+}
+
+function attachRulesetCatalogButton(option, settings) {
+  const renderWidget = option.renderWidget;
+
+  option.renderWidget = function (section_id) {
+    const node = renderWidget.apply(this, arguments);
+
+    return E("div", { class: "fkp-ruleset-catalog-field" }, [
+      node,
+      E(
+        "button",
+        {
+          type: "button",
+          class: "btn cbi-button cbi-button-neutral fkp-ruleset-catalog-open",
+          click: (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            showRulesetCatalogModal(section_id, this, settings);
+          },
+        },
+        _("Choose from catalog"),
+      ),
+    ]);
+  };
+}
+
 function createSectionContent(section) {
   let o;
 
@@ -7758,6 +8236,7 @@ function createSectionContent(section) {
   ruleSetOption.validate = function (section_id, value) {
     return validateCustomRulesetReference(value);
   };
+  attachRulesetCatalogButton(ruleSetOption, { allowSubnets: true });
 
   const dnsRuleSetOption = section.taboption(
     "conditions",
@@ -7783,6 +8262,8 @@ function createSectionContent(section) {
   dnsRuleSetOption.validate = function (_section_id, value) {
     return validateCustomRulesetReference(value);
   };
+  // DNS rules match domains only, so the geoip catalog is hidden here.
+  attachRulesetCatalogButton(dnsRuleSetOption, { allowSubnets: false });
 
   const domainIpListsOption = section.taboption(
     "conditions",

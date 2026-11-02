@@ -96,6 +96,15 @@ msgstr ""
 msgid "Add URLs or local paths to .lst lists containing domains, IP addresses, or CIDR ranges. DNS actions ignore IP entries."
 msgstr ""
 
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7259
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7391
+msgid "Add selected"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7258
+msgid "Add selected (%d)"
+msgstr ""
+
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7775
 msgid "Add URLs or local paths to .lst lists containing domains and subnets."
 msgstr ""
@@ -198,6 +207,10 @@ msgstr ""
 
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:2645
 msgid "ALPN"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7288
+msgid "already added"
 msgstr ""
 
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:2879
@@ -374,6 +387,10 @@ msgstr ""
 msgid "Cascade connection"
 msgstr ""
 
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7116
+msgid "Catalog index is empty"
+msgstr ""
+
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:2655
 msgid "Certificate path"
 msgstr ""
@@ -440,6 +457,10 @@ msgstr ""
 
 #: src/forkop/tabs/diagnostic/checks/getDnsCheckPresentation.ts:27
 msgid "Checks passed with manual DHCP"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7424
+msgid "Choose from catalog"
 msgstr ""
 
 #: src/validators/validateSubnet.ts:35
@@ -1041,6 +1062,10 @@ msgstr ""
 msgid "Failed to execute"
 msgstr ""
 
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7340
+msgid "Failed to load catalog: %s"
+msgstr ""
+
 #: src/forkop/tabs/dashboard/initController.ts:275
 #: src/forkop/tabs/dashboard/initController.ts:276
 #: src/forkop/tabs/dashboard/initController.ts:295
@@ -1195,6 +1220,10 @@ msgstr ""
 
 #: src/forkop/tabs/diagnostic/checks/runInboundsCheck.ts:89
 msgid "Generated inbound"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7364
+msgid "geoip lists are added with subnets enabled."
 msgstr ""
 
 #: src/forkop/tabs/diagnostic/partials/renderAvailableActions.ts:98
@@ -1724,6 +1753,14 @@ msgstr ""
 msgid "Listening port"
 msgstr ""
 
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7318
+msgid "Lists found: %d"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7330
+msgid "Loading catalog…"
+msgstr ""
+
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:1703
 msgid "Loading client link..."
 msgstr ""
@@ -1952,6 +1989,10 @@ msgstr ""
 #: src/forkop/tabs/diagnostic/initController.ts:403
 #: src/forkop/tabs/diagnostic/initController.ts:489
 msgid "Not running"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7312
+msgid "Nothing found"
 msgstr ""
 
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:2900
@@ -2288,6 +2329,10 @@ msgstr ""
 msgid "Routing section"
 msgstr ""
 
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7377
+msgid "Rule set catalog"
+msgstr ""
+
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:6925
 msgid "Rule set must be an HTTP(S) URL or a local .srs / .json path"
 msgstr ""
@@ -2339,6 +2384,10 @@ msgstr ""
 
 #: src/forkop/tabs/monitoring/render.ts:47
 msgid "Search"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7244
+msgid "Search, e.g. apple"
 msgstr ""
 
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:2939
@@ -2447,6 +2496,10 @@ msgstr ""
 #: src/forkop/tabs/dashboard/initController.ts:910
 #: src/forkop/tabs/dashboard/initController.ts:1137
 msgid "Selected"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7360
+msgid "Selected lists are added to the rule sets as regular links and downloaded by the router."
 msgstr ""
 
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:2564
@@ -2570,6 +2623,14 @@ msgstr ""
 
 #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2349
 msgid "Show subscription metadata for this source on the dashboard"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7370
+msgid "Show variants (@cn, @ads…)"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7314
+msgid "Showing %d of %d lists, refine the search to see the rest"
 msgstr ""
 
 #: src/forkop/tabs/diagnostic/checks/runSingBoxCheck.ts:77

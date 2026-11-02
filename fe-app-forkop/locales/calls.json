@@ -145,6 +145,21 @@
     ]
   },
   {
+    "call": "Add selected",
+    "key": "Add selected",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7259",
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7391"
+    ]
+  },
+  {
+    "call": "Add selected (%d)",
+    "key": "Add selected (%d)",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7258"
+    ]
+  },
+  {
     "call": "Add URLs or local paths to .lst lists containing domains and subnets.",
     "key": "Add URLs or local paths to .lst lists containing domains and subnets.",
     "places": [
@@ -314,6 +329,13 @@
     "key": "ALPN",
     "places": [
       "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:2645"
+    ]
+  },
+  {
+    "call": "already added",
+    "key": "already added",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7288"
     ]
   },
   {
@@ -604,6 +626,13 @@
     ]
   },
   {
+    "call": "Catalog index is empty",
+    "key": "Catalog index is empty",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7116"
+    ]
+  },
+  {
     "call": "Certificate path",
     "key": "Certificate path",
     "places": [
@@ -694,6 +723,13 @@
     "key": "Checks passed with manual DHCP",
     "places": [
       "src/forkop/tabs/diagnostic/checks/getDnsCheckPresentation.ts:27"
+    ]
+  },
+  {
+    "call": "Choose from catalog",
+    "key": "Choose from catalog",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7424"
     ]
   },
   {
@@ -1693,6 +1729,13 @@
     ]
   },
   {
+    "call": "Failed to load catalog: %s",
+    "key": "Failed to load catalog: %s",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7340"
+    ]
+  },
+  {
     "call": "Failed to update subscriptions",
     "key": "Failed to update subscriptions",
     "places": [
@@ -1957,6 +2000,13 @@
     "key": "Generated inbound",
     "places": [
       "src/forkop/tabs/diagnostic/checks/runInboundsCheck.ts:89"
+    ]
+  },
+  {
+    "call": "geoip lists are added with subnets enabled.",
+    "key": "geoip lists are added with subnets enabled.",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7364"
     ]
   },
   {
@@ -2866,6 +2916,20 @@
     ]
   },
   {
+    "call": "Lists found: %d",
+    "key": "Lists found: %d",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7318"
+    ]
+  },
+  {
+    "call": "Loading catalog…",
+    "key": "Loading catalog…",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7330"
+    ]
+  },
+  {
     "call": "Loading client link...",
     "key": "Loading client link...",
     "places": [
@@ -3243,6 +3307,13 @@
       "src/forkop/tabs/diagnostic/initController.ts:346",
       "src/forkop/tabs/diagnostic/initController.ts:403",
       "src/forkop/tabs/diagnostic/initController.ts:489"
+    ]
+  },
+  {
+    "call": "Nothing found",
+    "key": "Nothing found",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7312"
     ]
   },
   {
@@ -3814,6 +3885,13 @@
     ]
   },
   {
+    "call": "Rule set catalog",
+    "key": "Rule set catalog",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7377"
+    ]
+  },
+  {
     "call": "Rule set must be an HTTP(S) URL or a local .srs / .json path",
     "key": "Rule set must be an HTTP(S) URL or a local .srs / .json path",
     "places": [
@@ -3903,6 +3981,13 @@
     "key": "Search",
     "places": [
       "src/forkop/tabs/monitoring/render.ts:47"
+    ]
+  },
+  {
+    "call": "Search, e.g. apple",
+    "key": "Search, e.g. apple",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7244"
     ]
   },
   {
@@ -4089,6 +4174,13 @@
     "places": [
       "src/forkop/tabs/dashboard/initController.ts:910",
       "src/forkop/tabs/dashboard/initController.ts:1137"
+    ]
+  },
+  {
+    "call": "Selected lists are added to the rule sets as regular links and downloaded by the router.",
+    "key": "Selected lists are added to the rule sets as regular links and downloaded by the router.",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7360"
     ]
   },
   {
@@ -4292,6 +4384,20 @@
     "key": "Show subscription metadata for this source on the dashboard",
     "places": [
       "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2349"
+    ]
+  },
+  {
+    "call": "Show variants (@cn, @ads…)",
+    "key": "Show variants (@cn, @ads…)",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7370"
+    ]
+  },
+  {
+    "call": "Showing %d of %d lists, refine the search to see the rest",
+    "key": "Showing %d of %d lists, refine the search to see the rest",
+    "places": [
+      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7314"
     ]
   },
   {
