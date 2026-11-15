@@ -14,6 +14,10 @@ const SYSTEM_INFO_CACHE_FILE = getenv("FORKOP_SYSTEM_INFO_CACHE_FILE") || RUNTIM
 const COMPONENT_LOCK_DIR = getenv("UPDATES_LOCK_DIR") || RUNTIME_STATE_DIR + "/component-action.lock";
 const TMP_STALE_TTL_MINUTES = getenv("UPDATES_TMP_STALE_TTL_MINUTES") || "30";
 const TMP_FILE_STALE_TTL_MINUTES = getenv("UPDATES_TMP_FILE_STALE_TTL_MINUTES") || "10";
+const OPENWRT_RELEASE_FILE = getenv("FORKOP_OPENWRT_RELEASE_FILE") || "/etc/openwrt_release";
+const OVERLAY_DIR = getenv("FORKOP_OVERLAY_DIR") || "/overlay";
+// Extra flash space kept free when deciding whether the sing-box-extended package fits.
+const FLASH_RESERVE_KB = 1024;
 const SB_MANAGED_SERVICE_MARKER = getenv("SB_MANAGED_SERVICE_MARKER") || constants.SB_MANAGED_SERVICE_MARKER || "Forkop managed sing-box service for binary variants";
 
 let tmp_dir = "";
@@ -479,7 +483,7 @@ function check_success(component, current_version, latest_version, release_url) 
 }
 
 function read_openwrt_release_value(key) {
-    return trim(helper_output("openwrt-release-value", [ "/etc/openwrt_release", key ]));
+    return trim(helper_output("openwrt-release-value", [ OPENWRT_RELEASE_FILE, key ]));
 }
 
 function service_proxy_address() {
@@ -951,7 +955,7 @@ function download_and_extract_zip_package(release, component) {
 
 function resolve_byedpi_release(arch) {
     let asset_ext = is_apk() ? "apk" : "ipk";
-    let release_series = trim(helper_output("openwrt-release-series", [ "/etc/openwrt_release" ]));
+    let release_series = trim(helper_output("openwrt-release-series", [ OPENWRT_RELEASE_FILE ]));
     let releases_json = fetch_github_releases_json("DPITrickster", "ByeDPI-OpenWrt", "30");
     if (releases_json == "")
         return null;
@@ -1370,6 +1374,31 @@ function restore_sing_box_after_failed_extended_package_install(previous_variant
     return restore_status;
 }
 
+// Free space in KB on the writable flash (overlay), or -1 when unknown.
+function flash_free_kb() {
+    for (let path in [ OVERLAY_DIR, "/" ]) {
+        if (!file_exists(path))
+            continue;
+        let value = trim(command_output("df -k " + shell_quote(path) + " 2>/dev/null | awk 'NR==2 {print $4}'"));
+        if (match(value, /^[0-9]+$/))
+            return int(value);
+    }
+    return -1;
+}
+
+// Space in KB the package needs once installed. IPK control files carry
+// Installed-Size; for APK the package size is scaled by the ratio seen in
+// sing-box-extended IPKs (about 3x).
+function package_installed_size_kb(package_file) {
+    if (!is_apk()) {
+        let value = trim(command_output("tar -xzOf " + shell_quote(package_file) + " ./control.tar.gz 2>/dev/null | tar -xzO ./control 2>/dev/null | sed -n 's/^Installed-Size: *//p'"));
+        if (match(value, /^[0-9]+$/))
+            return int(value);
+    }
+    let stat = fs.stat(package_file);
+    return stat && stat.size ? int(stat.size * 3 / 1024) : -1;
+}
+
 function install_sing_box_extended_package(action) {
     init_tmp_dir() || action_fail("sing_box", action, "Failed to create temporary directory");
     let current_version = sing_box_runtime_output("version", []);
@@ -1393,6 +1422,17 @@ function install_sing_box_extended_package(action) {
     let package_file = tmp_dir + "/" + release.asset_name;
     if (!download_with_retry(release.asset_url, package_file, release.asset_name))
         action_fail("sing_box", action, "Failed to download sing-box-extended package", current_version, latest_version);
+
+    // The full package needs about 100 MB of flash; small routers get the
+    // compressed binary instead (about 21 MB).
+    let required_kb = package_installed_size_kb(package_file);
+    let free_kb = flash_free_kb();
+    if (required_kb > 0 && free_kb >= 0 && free_kb < required_kb + FLASH_RESERVE_KB) {
+        updates_log("Not enough flash space for the sing-box-extended package: needs " + int(required_kb / 1024) +
+            " MB, free " + int(free_kb / 1024) + " MB; installing the compressed sing-box-extended binary instead", "warn");
+        remove_file(package_file);
+        return false;
+    }
 
     if (!run_logged("Updating package lists before sing-box-extended package installation", pkg_list_update_command()))
         action_fail("sing_box", action, "Failed to update package lists", current_version, latest_version);
@@ -1479,10 +1519,10 @@ function install_sing_box_extended_package(action) {
 }
 
 function install_sing_box_extended(action, compressed) {
-    if (!compressed) {
-        install_sing_box_extended_package(action);
+    // The package install exits on success or failure; it returns false only
+    // when the package does not fit on flash and the compressed binary is used.
+    if (!compressed && install_sing_box_extended_package(action) !== false)
         return;
-    }
 
     init_tmp_dir() || action_fail("sing_box", action, "Failed to create temporary directory");
     let label = "sing-box-extended compressed";
