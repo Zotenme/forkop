@@ -491,17 +491,22 @@ function service_proxy_address() {
     return trim(module_output([ LIB_DIR + "/singbox/runtime.uc", "service-proxy-address", "components" ]));
 }
 
-function http_get_once(url, output_path, proxy_address, timeout) {
+function http_get_once(url, output_path, proxy_address, timeout, accept) {
     url = as_string(url);
     output_path = as_string(output_path);
     proxy_address = as_string(proxy_address);
     timeout = as_string(timeout || "30");
+    accept = as_string(accept);
 
     if (command_exists("curl")) {
         let args = [ "curl", "--connect-timeout", "5", "-m", timeout, "-fsSL" ];
         if (proxy_address != "") {
             push(args, "-x");
             push(args, "http://" + proxy_address);
+        }
+        if (accept != "") {
+            push(args, "-H");
+            push(args, "Accept: " + accept);
         }
         push(args, url);
         push(args, "-o");
@@ -510,7 +515,11 @@ function http_get_once(url, output_path, proxy_address, timeout) {
     }
 
     if (command_exists("wget")) {
-        let command = command_from_args([ "wget", "-T", timeout, "-q", "-O", output_path, url ]);
+        let args = [ "wget", "-T", timeout, "-q" ];
+        if (accept != "")
+            push(args, "--header=Accept: " + accept);
+        push(args, "-O", output_path, url);
+        let command = command_from_args(args);
         if (proxy_address != "")
             command = command_env({ http_proxy: "http://" + proxy_address, https_proxy: "http://" + proxy_address }) + " " + command;
         return command_success(command);
@@ -546,20 +555,57 @@ function http_get(url) {
     return "";
 }
 
-function download_file_once(url, output_path) {
+function download_file_once(url, output_path, accept) {
     let proxy_address = service_proxy_address();
     if (proxy_address != "") {
-        if (http_get_once(url, output_path, proxy_address, "120"))
+        if (http_get_once(url, output_path, proxy_address, "120", accept))
             return true;
         remove_file(output_path);
         updates_log("Download via service proxy failed for " + as_string(url) + "; retrying directly", "warn");
     }
-    return http_get_once(url, output_path, "", "120");
+    return http_get_once(url, output_path, "", "120", accept);
+}
+
+// Maps a github.com release download link to its GitHub API asset URL. The API
+// URL redirects straight to release-assets.githubusercontent.com, so the
+// download works on networks where github.com is unreachable but the API and
+// the CDN are not.
+function github_release_asset_api_url(url) {
+    url = as_string(url);
+    let parts = match(url, /^https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/releases\/download\/([^\/]+)\/[^\/?#]+$/);
+    if (!parts)
+        return "";
+
+    let response = http_get("https://api.github.com/repos/" + parts[1] + "/" + parts[2] + "/releases/tags/" + parts[3]);
+    if (response == "")
+        return "";
+
+    let release = null;
+    try {
+        release = json(response);
+    }
+    catch (e) {
+        return "";
+    }
+    if (type(release) != "object" || type(release.assets) != "array")
+        return "";
+
+    for (let asset in release.assets)
+        if (type(asset) == "object" && as_string(asset.browser_download_url) == url)
+            return as_string(asset.url || "");
+
+    return "";
 }
 
 function download_with_retry(url, output_path, label) {
+    let api_url = github_release_asset_api_url(url);
     for (let attempt = 1; attempt <= 3; attempt++) {
         updates_log("Downloading " + as_string(label) + " (" + attempt + "/3)");
+        if (api_url != "") {
+            if (download_file_once(api_url, output_path, "application/octet-stream") && file_nonempty(output_path))
+                return true;
+            remove_file(output_path);
+        }
         if (download_file_once(url, output_path) && file_nonempty(output_path))
             return true;
         remove_file(output_path);
@@ -1634,7 +1680,8 @@ function resolve_forkop_release(latest_version) {
         return null;
     let asset_ext = is_apk() ? "apk" : "ipk";
     let i18n_required = pkg_is_installed("luci-i18n-forkop-ru") ? "1" : "0";
-    let plan = trim(helper_output_input(release_json, "forkop-release-plan", [ latest_version, asset_ext, i18n_required ]));
+    // Only strip the line ending: trim() would also eat the empty i18n fields.
+    let plan = rtrim(helper_output_input(release_json, "forkop-release-plan", [ latest_version, asset_ext, i18n_required ]), "\r\n");
     let fields = split(plan, "\t");
     if (length(fields) < 7 || as_string(fields[1]) == "" || as_string(fields[2]) == "" || as_string(fields[3]) == "" || as_string(fields[4]) == "")
         return null;

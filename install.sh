@@ -27,6 +27,9 @@ FORKOP_BACKEND_FILE=""
 FORKOP_APP_URL=""
 FORKOP_APP_NAME=""
 FORKOP_APP_FILE=""
+FORKOP_BACKEND_API_URL=""
+FORKOP_APP_API_URL=""
+FORKOP_I18N_API_URL=""
 FORKOP_I18N_URL=""
 FORKOP_I18N_NAME=""
 FORKOP_I18N_FILE=""
@@ -1379,7 +1382,7 @@ function release_tag() {
         print(as_string(release.tag_name), "\n");
 }
 
-function release_asset_url(kind, ext) {
+function release_asset_field(kind, ext, field) {
     let release = read_stdin_json();
     if (type(release) != "object" || type(release.assets) != "array")
         return;
@@ -1388,7 +1391,7 @@ function release_asset_url(kind, ext) {
         return;
     for (let asset in release.assets) {
         if (type(asset) == "object" && asset_matches(asset.name, kind, ext, version)) {
-            print(as_string(asset.browser_download_url || ""), "\n");
+            print(as_string(asset[field] || ""), "\n");
             return;
         }
     }
@@ -1401,7 +1404,9 @@ if (mode == "github-message")
 else if (mode == "release-tag")
     release_tag();
 else if (mode == "release-asset-url")
-    release_asset_url(ARGV[1], ARGV[2]);
+    release_asset_field(ARGV[1], ARGV[2], "browser_download_url");
+else if (mode == "release-asset-api-url")
+    release_asset_field(ARGV[1], ARGV[2], "url");
 else if (mode == "uci-get") {
     let value = uci_get(ARGV[1]);
     if (value != "")
@@ -1433,13 +1438,23 @@ install_json_ucode() {
         ucode "$(install_json_helper_path)" "$@"
 }
 
+# The optional third argument is an Accept header value. GitHub API asset URLs
+# need "application/octet-stream" to redirect straight to the release CDN.
 download_file_once() {
     case "$FETCHER" in
         wget)
-            run_with_deadline "$DOWNLOAD_TIMEOUT_SECONDS" wget -T "$CONNECT_TIMEOUT_SECONDS" -q -O "$2" "$1"
+            if [ -n "${3:-}" ]; then
+                run_with_deadline "$DOWNLOAD_TIMEOUT_SECONDS" wget -T "$CONNECT_TIMEOUT_SECONDS" -q --header "Accept: $3" -O "$2" "$1"
+            else
+                run_with_deadline "$DOWNLOAD_TIMEOUT_SECONDS" wget -T "$CONNECT_TIMEOUT_SECONDS" -q -O "$2" "$1"
+            fi
             ;;
         curl)
-            curl --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$DOWNLOAD_TIMEOUT_SECONDS" -fsSL "$1" -o "$2"
+            if [ -n "${3:-}" ]; then
+                curl --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$DOWNLOAD_TIMEOUT_SECONDS" -fsSL -H "Accept: $3" "$1" -o "$2"
+            else
+                curl --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$DOWNLOAD_TIMEOUT_SECONDS" -fsSL "$1" -o "$2"
+            fi
             ;;
         *)
             return 1
@@ -1447,15 +1462,26 @@ download_file_once() {
     esac
 }
 
+# Release assets are fetched through the GitHub API first: it redirects straight
+# to release-assets.githubusercontent.com, so github.com itself is not needed.
+# Some networks cannot reach github.com while the API and the CDN work.
 download_with_retry() {
     url="$1"
     output_path="$2"
     label="$3"
+    api_url="${4:-}"
     attempt=1
     max_attempts=3
 
     while [ "$attempt" -le "$max_attempts" ]; do
         msg "Downloading $label ($attempt/$max_attempts)"
+
+        if [ -n "$api_url" ]; then
+            if download_file_once "$api_url" "$output_path" "application/octet-stream" && [ -s "$output_path" ]; then
+                return 0
+            fi
+            rm -f "$output_path"
+        fi
 
         if download_file_once "$url" "$output_path" && [ -s "$output_path" ]; then
             return 0
@@ -1720,16 +1746,21 @@ resolve_forkop_release() {
     FORKOP_APP_URL="$(printf '%s' "$FORKOP_RELEASE_JSON" | install_json_ucode release-asset-url app "$asset_ext" 2>/dev/null)"
     [ -n "$FORKOP_APP_URL" ] || fail "The Forkop release does not contain a luci-app-forkop .$asset_ext package"
 
+    FORKOP_BACKEND_API_URL="$(printf '%s' "$FORKOP_RELEASE_JSON" | install_json_ucode release-asset-api-url backend "$asset_ext" 2>/dev/null)"
+    FORKOP_APP_API_URL="$(printf '%s' "$FORKOP_RELEASE_JSON" | install_json_ucode release-asset-api-url app "$asset_ext" 2>/dev/null)"
+
     FORKOP_BACKEND_NAME="$(basename "$FORKOP_BACKEND_URL")"
     FORKOP_APP_NAME="$(basename "$FORKOP_APP_URL")"
     FORKOP_PACKAGE_VERSION="$(printf '%s\n' "$FORKOP_BACKEND_NAME" | sed 's/^forkop_//;s/\.ipk$//;s/\.apk$//')"
 
     FORKOP_I18N_URL=""
+    FORKOP_I18N_API_URL=""
     FORKOP_I18N_NAME=""
 
     if [ "$FORKOP_I18N_REQUESTED" -eq 1 ]; then
         FORKOP_I18N_URL="$(printf '%s' "$FORKOP_RELEASE_JSON" | install_json_ucode release-asset-url i18n "$asset_ext" 2>/dev/null)"
         [ -n "$FORKOP_I18N_URL" ] || fail "The Forkop release does not contain a luci-i18n-forkop-ru .$asset_ext package"
+        FORKOP_I18N_API_URL="$(printf '%s' "$FORKOP_RELEASE_JSON" | install_json_ucode release-asset-api-url i18n "$asset_ext" 2>/dev/null)"
         FORKOP_I18N_NAME="$(basename "$FORKOP_I18N_URL")"
     fi
 }
@@ -1880,12 +1911,12 @@ download_forkop_packages() {
     FORKOP_APP_FILE="$TMP_DIR/$FORKOP_APP_NAME"
     FORKOP_I18N_FILE=""
 
-    download_with_retry "$FORKOP_BACKEND_URL" "$FORKOP_BACKEND_FILE" "$FORKOP_BACKEND_NAME" || fail "Failed to download $FORKOP_BACKEND_NAME"
-    download_with_retry "$FORKOP_APP_URL" "$FORKOP_APP_FILE" "$FORKOP_APP_NAME" || fail "Failed to download $FORKOP_APP_NAME"
+    download_with_retry "$FORKOP_BACKEND_URL" "$FORKOP_BACKEND_FILE" "$FORKOP_BACKEND_NAME" "$FORKOP_BACKEND_API_URL" || fail "Failed to download $FORKOP_BACKEND_NAME"
+    download_with_retry "$FORKOP_APP_URL" "$FORKOP_APP_FILE" "$FORKOP_APP_NAME" "$FORKOP_APP_API_URL" || fail "Failed to download $FORKOP_APP_NAME"
 
     if [ -n "$FORKOP_I18N_URL" ]; then
         FORKOP_I18N_FILE="$TMP_DIR/$FORKOP_I18N_NAME"
-        download_with_retry "$FORKOP_I18N_URL" "$FORKOP_I18N_FILE" "$FORKOP_I18N_NAME" || fail "Failed to download $FORKOP_I18N_NAME"
+        download_with_retry "$FORKOP_I18N_URL" "$FORKOP_I18N_FILE" "$FORKOP_I18N_NAME" "$FORKOP_I18N_API_URL" || fail "Failed to download $FORKOP_I18N_NAME"
     fi
 }
 

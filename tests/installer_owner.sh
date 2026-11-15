@@ -196,6 +196,9 @@ printf '%s\n' '{"tag_name":"0.0.1"}' | ucode "$helper" release-tag | grep -Fxq '
 release_json='{"tag_name":"0.0.1","assets":[{"name":"forkop_0.0.1.ipk","browser_download_url":"https://example.com/forkop.ipk"}]}'
 printf '%s' "$release_json" | ucode "$helper" release-asset-url backend ipk | grep -Fxq 'https://example.com/forkop.ipk' ||
   fail "embedded helper must resolve the exact three-part Forkop package name"
+release_api_json='{"tag_name":"0.0.1","assets":[{"name":"forkop_0.0.1.ipk","url":"https://api.github.com/repos/o/r/releases/assets/7","browser_download_url":"https://github.com/o/r/releases/download/0.0.1/forkop_0.0.1.ipk"}]}'
+printf '%s' "$release_api_json" | ucode "$helper" release-asset-api-url backend ipk | grep -Fxq 'https://api.github.com/repos/o/r/releases/assets/7' ||
+  fail "embedded helper must resolve the GitHub API asset URL"
 if printf '%s' '{"tag_name":"0.0.1","assets":[{"name":"forkop_0.0.1_all.ipk","browser_download_url":"https://example.com/old.ipk"}]}' |
   ucode "$helper" release-asset-url backend ipk | grep -q .; then
   fail "embedded helper must reject package names outside the Forkop release format"
