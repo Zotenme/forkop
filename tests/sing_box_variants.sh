@@ -156,4 +156,4 @@ parse_args --variant tiny
 [ "$SING_BOX_REQUESTED_VARIANT" = tiny ] || fail "installer explicit tiny option"
 if (parse_args --variant invalid) >/dev/null 2>&1; then fail "invalid installer variant was accepted"; fi
 if (parse_args --variant) >/dev/null 2>&1; then fail "installer accepted a missing variant"; fi
-printf 'Core variant installation, update and rollback checks passed\n' 
+printf 'Core variant installation, update and rollback checks passed\n'
