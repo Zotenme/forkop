@@ -1269,6 +1269,8 @@ let defaults = cfg("default");
 assert(first_remote_ruleset(defaults).update_interval == "1d", "default list update interval");
 assert(defaults.dns.strategy == "prefer_ipv4", "missing DNS strategy keeps the prefer_ipv4 default");
 assert(dns_server(defaults, r => r.tag == "dnsmasq-server") == null, "source-aware DNS server is omitted without device filters");
+let torrent_default = route_rule(defaults, r => r.protocol == "bittorrent");
+assert(torrent_default && torrent_default.action == "route" && torrent_default.outbound == "direct-out", "BitTorrent goes direct without any opt-in setting");
 
 let server = cfg("server");
 let socks = inbound(server, "server-edge-in");
@@ -1280,6 +1282,16 @@ assert(open_socks.users == null, "disabled server socks auth omits users");
 assert(route_rule(server, r => r.inbound == "server-edge-in" && r.outbound == "direct-out") != null, "server direct route");
 
 let matchers = cfg("matchers");
+let torrent_index = route_rule_index(matchers, r => r.protocol == "bittorrent");
+assert(torrent_index >= 0, "BitTorrent bypass is present with section routing");
+let torrent = matchers.route.rules[torrent_index];
+assert(torrent.action == "route" && torrent.outbound == "direct-out", "BitTorrent bypass uses the direct outbound");
+assert(contains(torrent.inbound, "tproxy-in") && contains(torrent.inbound, "tproxy6-in"), "BitTorrent bypass covers IPv4 and IPv6 capture");
+assert(!contains(torrent.inbound, "proxy-mixed-in") && !contains(torrent.inbound, "dns-in"), "BitTorrent bypass is limited to transparent capture");
+let torrent_sniff_index = route_rule_index(matchers, r => r.action == "sniff" && contains(r.inbound, "tproxy-in") && contains(r.inbound, "tproxy6-in"));
+assert(torrent_sniff_index >= 0 && torrent_sniff_index < torrent_index, "both address families are sniffed before the BitTorrent bypass");
+for (let i = 0; i < torrent_index; i++)
+    assert(matchers.route.rules[i].action != "route", "BitTorrent bypass precedes all section routes");
 assert(matchers.dns.strategy == "prefer_ipv6", "configured DNS strategy is generated");
 assert(dns_server(matchers, r => r.tag == "fakeip-server" && r.inet6_range == "fc00::/18") != null, "FakeIP IPv6 range");
 assert(inbound(matchers, "tproxy6-in") != null, "IPv6 TProxy inbound");
@@ -1456,6 +1468,9 @@ assert(dns_action_114.route.default_http_client == "direct-http-client" && lengt
 assert(direct_ruleset_114.http_client == null && direct_ruleset_114.download_detour == null, "sing-box 1.14 direct remote ruleset uses the default HTTP client");
 
 let fully = cfg("fully-routed");
+let fully_torrent_index = route_rule_index(fully, r => r.protocol == "bittorrent" && r.action == "route" && r.outbound == "direct-out");
+let full_device_index = route_rule_index(fully, r => contains(r.source_ip_cidr, "192.168.1.40/32") && r.action == "route");
+assert(fully_torrent_index >= 0 && full_device_index > fully_torrent_index, "BitTorrent bypass takes priority over full-device proxy routing");
 assert(route_rule(fully, r => r.outbound == "bypass-out" && contains(r.inbound, "tproxy-in") && contains(r.inbound, "tproxy6-in") && contains(r.source_ip_cidr, "192.168.1.20/32") && contains(r.source_ip_cidr, "192.168.1.30/32") && contains(r.source_ip_cidr, "2001:db8::20/128")) != null, "fully routed bypass IP route");
 assert(route_rule(fully, r => r.outbound == "proxy-out" && contains(r.source_ip_cidr, "192.168.1.40/32")) != null, "fully routed proxy IP route");
 let fully_bypass_dns = dns_rule(fully, r =>

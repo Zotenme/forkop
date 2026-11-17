@@ -21,7 +21,10 @@ function config(settings, runtime) {
     let dns_inbounds = [ runtime_constants.DNS_INBOUND_TAG ];
     if (type(runtime) == "object" && bool_value(runtime.source_aware_dns))
         push(dns_inbounds, runtime_constants.SOURCE_DNS_INBOUND_TAG);
-    let sniff_inbounds = [ runtime_constants.TPROXY_INBOUND_TAG ];
+    let tproxy_inbounds = [ runtime_constants.TPROXY_INBOUND_TAG, runtime_constants.TPROXY_INBOUND6_TAG ];
+    let sniff_inbounds = [];
+    for (let inbound in tproxy_inbounds)
+        push(sniff_inbounds, inbound);
     for (let inbound in dns_inbounds)
         push(sniff_inbounds, inbound);
     let result = {
@@ -31,7 +34,9 @@ function config(settings, runtime) {
             { action: "hijack-dns", protocol: "dns" },
             // What a DNS inbound holds and is no query would reach the direct outbound, whose
             // destination is the inbound's own listen address, and loop back in as a new session.
-            { action: "reject", inbound: dns_inbounds }
+            { action: "reject", inbound: dns_inbounds },
+            // Keep detected torrent sessions ahead of every section, including full-device routes.
+            { action: "route", inbound: tproxy_inbounds, protocol: "bittorrent", outbound: runtime_constants.DIRECT_OUTBOUND_TAG }
         ],
         rule_set: [],
         final: runtime_constants.DIRECT_OUTBOUND_TAG,
