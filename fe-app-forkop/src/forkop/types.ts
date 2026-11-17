@@ -467,6 +467,7 @@ export namespace Forkop {
     luci_app_version: string;
     sing_box_version: string;
     sing_box_extended: 0 | 1;
+    sing_box_forkop?: 0 | 1;
     sing_box_tiny: 0 | 1;
     sing_box_compressed: 0 | 1;
     sing_box_tailscale: 0 | 1;
@@ -483,12 +484,14 @@ export namespace Forkop {
 
   export interface GetServerCapabilities {
     sing_box_extended: 0 | 1;
+    sing_box_forkop?: 0 | 1;
     sing_box_tiny: 0 | 1;
     sing_box_tailscale: 0 | 1;
   }
 
   export interface GetUiCapabilities {
     sing_box_extended: 0 | 1;
+    sing_box_forkop?: 0 | 1;
     sing_box_tiny: 0 | 1;
     sing_box_compressed: 0 | 1;
     sing_box_tailscale: 0 | 1;
@@ -558,7 +561,8 @@ export namespace Forkop {
     | 'install'
     | 'remove'
     | 'install_extended'
-    | 'install_extended_compressed';
+    | 'install_extended_compressed'
+    | 'install_forkop_tiny';
 
   export interface ComponentActionResult {
     success: boolean;

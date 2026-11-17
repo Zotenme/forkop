@@ -103,7 +103,7 @@ grep -Fq 'let package_spec = package_name + "=" + package_version;' "$ACTION_UC"
   fail "APK sing-box installs must pin the concrete package version instead of selecting a provider"
 grep -Fq 'Package rollback failed; restored the previous sing-box binary backup' "$ACTION_UC" ||
   fail "package rollback must accept a successfully restored binary backup"
-grep -Fq '!file_exists("/etc/init.d/sing-box") && file_nonempty("/usr/bin/sing-box")' "$ACTION_UC" ||
+grep -Fq '!file_exists(SB_SERVICE_INIT) && file_nonempty(SB_BINARY_PATH)' "$ACTION_UC" ||
   fail "binary rollback must restore a managed sing-box service when the package script is missing"
 if grep -Fq 'command_success_from_args([ SERVICE_INIT, "status" ])' "$ACTION_UC"; then
   fail "components/action.uc must not call init.d status without a timeout"
@@ -135,25 +135,24 @@ assert_eq "extracted payload" "$(cat "$command_success_output")" \
   "component command success preserves explicit output redirection"
 
 awk '
-prev2 == "    remove_file(archive_file);" &&
-prev1 == "    stop_forkop_before_sing_box_change();" &&
-$0 == "    let new_version = validate_sing_box_extended_binary(tmp_binary, tmp_dir);" {
-  safe_validation = 1
+/remove_file\(archive_file\);/ { released = NR }
+/stop_forkop_before_sing_box_change\(\);/ { stopped = NR }
+/let new_version = tiny \? read_sing_box_binary_version\(tmp_binary/ {
+  if (released > 0 && stopped > released && NR > stopped) safe_validation = 1
 }
-{ prev2 = prev1; prev1 = $0 }
 END { exit safe_validation ? 0 : 1 }
 ' "$ACTION_UC" ||
-  fail "compressed sing-box validation must release the archive and stop the running service to avoid OpenWrt OOM"
-grep -Fq 'install_staged_file(tmp_binary, "/usr/bin/sing-box", "0755")' "$ACTION_UC" ||
-  fail "compressed sing-box binary installation must support moving from tmpfs to overlay"
+  fail "binary core validation must release the archive and stop the running service to avoid OpenWrt OOM"
+grep -Fq 'install_staged_file(tmp_binary, SB_BINARY_PATH, "0755")' "$ACTION_UC" ||
+  fail "binary core installation must stage onto overlay before the final rename"
 grep -Fq 'install_staged_file(tmp_cronet, "/usr/lib/libcronet.so", "0644")' "$ACTION_UC" ||
   fail "compressed libcronet installation must support moving from tmpfs to overlay"
-if grep -Fq 'fs.rename(tmp_binary, "/usr/bin/sing-box")' "$ACTION_UC"; then
+if grep -Fq 'fs.rename(tmp_binary, SB_BINARY_PATH)' "$ACTION_UC"; then
   fail "compressed sing-box installation must not rename directly across OpenWrt filesystems"
 fi
-grep -Fq 'return move_file_portable(backup_binary, "/usr/bin/sing-box");' "$ACTION_UC" &&
+grep -Fq 'return move_file_portable(backup_binary, SB_BINARY_PATH);' "$ACTION_UC" &&
   fail "portable sing-box restore must preserve executable permissions explicitly"
-grep -Fq 'if (!move_file_portable(backup_binary, "/usr/bin/sing-box"))' "$ACTION_UC" ||
+grep -Fq 'if (!move_file_portable(backup_binary, SB_BINARY_PATH))' "$ACTION_UC" ||
   fail "compressed sing-box rollback must restore backups across filesystems"
 
 package_runtime_lib="$WORK_DIR/package-runtime-lib"
@@ -232,8 +231,8 @@ exit 0
 SH
 chmod +x "$package_runtime_bin/opkg" "$package_runtime_bin/logger"
 
-# Forkop runs only on sing-box-extended: builds from OpenWrt feeds are no
-# longer installed, and a check on one offers the switch to extended.
+# Legacy builds from OpenWrt feeds remain unsupported; the new upstream
+# forkop tiny build uses a distinct install_forkop_tiny action.
 for action in install_stable install_tiny; do
   set +e
   output="$(PATH="$package_runtime_bin:$PATH" \
@@ -250,7 +249,7 @@ for action in install_stable install_tiny; do
 done
 [ ! -s "$WORK_DIR/opkg.log" ] || fail "rejected sing-box actions must not touch packages"
 grep -Fq 'install_sing_box_extended(action, variant == "extended-compressed");' "$ACTION_UC" ||
-  fail "sing-box install and update must always resolve to sing-box-extended"
+  fail "non-tiny sing-box updates must keep the extended variant"
 grep -Fq '"sing-box-extended is required", current_version, latest_version, 0, "outdated"' "$ACTION_UC" ||
   fail "an update check on a non-extended sing-box must offer sing-box-extended"
 

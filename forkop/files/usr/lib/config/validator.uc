@@ -1,6 +1,7 @@
 #!/usr/bin/env ucode
 
 let fs = require("fs");
+let core_features = require("singbox.features");
 let uci_core_module = null;
 let fixture_uci_data = null;
 let subscription_parser_module = null;
@@ -1837,7 +1838,7 @@ function validate_extended_server_features(ctx, sing_box_version, sing_box_versi
         if (protocol == "tailscale" && !sing_box_supports_tailscale(ctx, sing_box_version, sing_box_version_output))
             fail_requirement("Server '" + name + "' uses Tailscale, but the installed sing-box binary was built without Tailscale support. Install full sing-box or sing-box-extended, or disable this server. Aborted.", "fatal");
 
-        if (transport == "xhttp")
+        if (transport == "xhttp" && !core_features.forkop_tiny())
             fail_requirement("Server '" + name + "' uses XHTTP transport, but sing-box-extended is not installed. Install sing-box-extended or change the transport. Aborted.", "fatal");
     }
 }
@@ -1954,7 +1955,7 @@ function check_runtime_requirements() {
         fail_requirement("Package 'sing-box' version (" + sing_box_version + ") is lower than the required minimum (" + ctx.sing_box_required_version + "). Install sing-box-extended on the Components tab. Aborted.", "error");
     }
 
-    if (!service_exists("sing-box") && sing_box_compressed_marker_set(ctx))
+    if (!service_exists("sing-box") && (sing_box_compressed_marker_set(ctx) || core_features.forkop_tiny()))
         install_managed_sing_box_service_script(ctx);
 
     if (!service_exists("sing-box"))

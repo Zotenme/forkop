@@ -628,6 +628,25 @@ function sing_box_extended_asset_url(arch_suffix, _unused, compressed) {
     exit(1);
 }
 
+function sing_box_forkop_tiny_release_plan(arch) {
+    let release = object_or_empty(read_stdin_json());
+    let tag = as_string(release.tag_name);
+    if (!match(tag, /^v[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$/) || release.draft || release.prerelease)
+        exit(1);
+    let name = "sing-box-forkop_" + substr(tag, 1) + "_tiny_" + as_string(arch) + ".ipk";
+    for (let asset in array_or_empty(release.assets)) {
+        if (asset.name != name)
+            continue;
+        let digest = as_string(asset.digest);
+        if (!match(digest, /^sha256:[0-9a-f]{64}$/))
+            exit(1);
+        write_json({ tag, asset_name: name, asset_url: asset.browser_download_url,
+            sha256: substr(digest, 7), release_url: release.html_url || "" });
+        return;
+    }
+    exit(1);
+}
+
 function sing_box_extended_package_asset_url(distrib_arch, asset_ext) {
     let release = object_or_empty(read_stdin_json());
     let suffix;
@@ -934,6 +953,8 @@ else if (mode == "sing-box-extended-arch-suffix")
     sing_box_extended_arch_suffix(ARGV[1], ARGV[2]);
 else if (mode == "sing-box-extended-asset-url")
     sing_box_extended_asset_url(ARGV[1], ARGV[2], ARGV[3]);
+else if (mode == "sing-box-forkop-tiny-release-plan")
+    sing_box_forkop_tiny_release_plan(ARGV[1]);
 else if (mode == "sing-box-extended-package-asset-url")
     sing_box_extended_package_asset_url(ARGV[1], ARGV[2]);
 else if (mode == "updates-opkg-package-version")

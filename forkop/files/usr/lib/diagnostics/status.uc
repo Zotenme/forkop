@@ -1158,7 +1158,9 @@ function render_global_sing_box_check() {
     render_flag_line(value, "sing_box_installed", "\u2705 Sing-box installed", "\u274c Sing-box installed");
     render_flag_line(value, "sing_box_version_ok", "\u2705 Sing-box version is compatible (1.14.0 or newer)", "\u274c Sing-box version is not compatible (older than 1.14.0)");
 
-    if (flag_is_one(value.sing_box_extended))
+    if (flag_is_one(value.sing_box_forkop))
+        print_line("Sing-box Forkop tiny detected");
+    else if (flag_is_one(value.sing_box_extended))
         print_line("Sing-box extended detected");
     else
         print_line("Sing-box regular build detected");

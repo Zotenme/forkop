@@ -1,6 +1,7 @@
 type SingBoxVariantFields = {
   sing_box_version?: string;
   sing_box_extended?: number;
+  sing_box_forkop?: number;
   sing_box_tiny?: number;
   sing_box_compressed?: number;
   sing_box_tailscale?: number;
@@ -50,7 +51,7 @@ export function formatSingBoxVersion(value: SingBoxVariantFields) {
   ) {
     variant = _('compressed');
   } else if (normalizedValue.sing_box_tiny) {
-    variant = _('tiny');
+    variant = normalizedValue.sing_box_forkop ? 'Forkop tiny' : _('tiny');
   }
 
   return variant ? `${version} (${variant})` : version;
@@ -60,13 +61,27 @@ export function normalizeSingBoxVariantFields<T extends SingBoxVariantFields>(
   value: T,
 ): T {
   const versionExtended = isExtendedSingBoxVersion(value.sing_box_version);
-  const singBoxExtended = Boolean(value.sing_box_extended) || versionExtended;
+  // Fresh capability state takes precedence over a cached version string
+  // while a core switch is completing in the background.
+  const forkopTiny = Boolean(value.sing_box_forkop);
+  const singBoxExtended =
+    !forkopTiny && (Boolean(value.sing_box_extended) || versionExtended);
 
   return {
     ...value,
     sing_box_extended: singBoxExtended ? 1 : 0,
-    sing_box_tiny: singBoxExtended ? 0 : value.sing_box_tiny ? 1 : 0,
+    sing_box_tiny: forkopTiny
+      ? 1
+      : singBoxExtended
+        ? 0
+        : value.sing_box_tiny
+          ? 1
+          : 0,
     sing_box_compressed: singBoxExtended && value.sing_box_compressed ? 1 : 0,
-    sing_box_tailscale: singBoxExtended || value.sing_box_tailscale ? 1 : 0,
+    sing_box_tailscale: forkopTiny
+      ? 0
+      : singBoxExtended || value.sing_box_tailscale
+        ? 1
+        : 0,
   } as T;
 }

@@ -335,7 +335,16 @@ function patchSystemInfoAfterMutation(result: Forkop.ComponentActionResult) {
   if (result.component === 'sing_box') {
     nextSystemInfo.sing_box_version = version;
 
+    if (result.action === 'install_forkop_tiny') {
+      nextSystemInfo.sing_box_forkop = 1;
+      nextSystemInfo.sing_box_extended = 0;
+      nextSystemInfo.sing_box_tiny = 1;
+      nextSystemInfo.sing_box_compressed = 0;
+      nextSystemInfo.sing_box_tailscale = 0;
+    }
+
     if (result.action === 'install_extended') {
+      nextSystemInfo.sing_box_forkop = 0;
       nextSystemInfo.sing_box_extended = 1;
       nextSystemInfo.sing_box_tiny = 0;
       nextSystemInfo.sing_box_compressed = 0;
@@ -343,6 +352,7 @@ function patchSystemInfoAfterMutation(result: Forkop.ComponentActionResult) {
     }
 
     if (result.action === 'install_extended_compressed') {
+      nextSystemInfo.sing_box_forkop = 0;
       nextSystemInfo.sing_box_extended = 1;
       nextSystemInfo.sing_box_tiny = 0;
       nextSystemInfo.sing_box_compressed = 1;
@@ -817,7 +827,16 @@ function getComponentCards(): ComponentCard[] {
     singBoxInstalled,
   );
 
-  // Forkop runs only on sing-box-extended, so only its two builds are offered.
+  if (!systemInfo.sing_box_forkop) {
+    singBoxActions.push({
+      key: 'singBoxInstallForkopTiny',
+      text: _('Tiny (less flash and RAM)'),
+      icon: renderDownloadIcon24,
+      component: 'sing_box',
+      action: 'install_forkop_tiny',
+    });
+  }
+
   if (!singBoxExtended) {
     singBoxActions.push({
       key: 'singBoxInstallExtended',
@@ -830,7 +849,7 @@ function getComponentCards(): ComponentCard[] {
   if (!singBoxExtendedCompressed) {
     singBoxActions.push({
       key: 'singBoxInstallExtendedCompressed',
-      text: 'Extended compressed',
+      text: _('Extended compressed (uses more RAM)'),
       icon: renderDownloadIcon24,
       component: 'sing_box',
       action: 'install_extended_compressed',

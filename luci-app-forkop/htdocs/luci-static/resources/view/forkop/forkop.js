@@ -103,6 +103,7 @@ const EntryPoint = {
     const uiCapabilities = {
       loaded: false,
       singBoxExtended: false,
+      singBoxForkop: false,
       singBoxTiny: false,
       singBoxTailscale: true,
       zapretInstalled: false,
@@ -137,6 +138,7 @@ const EntryPoint = {
             ...currentSystemInfo,
             providerInfoLoaded: true,
             sing_box_extended: uiCapabilities.singBoxExtended ? 1 : 0,
+            sing_box_forkop: uiCapabilities.singBoxForkop ? 1 : 0,
             sing_box_tiny: uiCapabilities.singBoxTiny ? 1 : 0,
             sing_box_tailscale: uiCapabilities.singBoxTailscale ? 1 : 0,
             zapret_installed: uiCapabilities.zapretInstalled ? 1 : 0,
@@ -163,6 +165,7 @@ const EntryPoint = {
       uiCapabilities.singBoxExtended = Boolean(
         Number(data?.sing_box_extended) === 1,
       );
+      uiCapabilities.singBoxForkop = Number(data?.sing_box_forkop) === 1;
       uiCapabilities.singBoxTiny = Boolean(Number(data?.sing_box_tiny) === 1);
       uiCapabilities.singBoxTailscale =
         typeof data?.sing_box_tailscale === "undefined"
@@ -191,6 +194,32 @@ const EntryPoint = {
 
       return uiCapabilities;
     };
+
+    // Core changes also arrive through the shared background state poller.
+    // Update server choices in place, without losing unsaved LuCI form edits.
+    if (main.store && typeof main.store.subscribe === "function") {
+      const unsubscribe = main.store.subscribe((state, _previous, diff) => {
+        if (!diff.diagnosticsSystemInfo) return;
+        const info = state.diagnosticsSystemInfo;
+        const coreFlags = {
+          singBoxExtended: Number(info.sing_box_extended) === 1,
+          singBoxForkop: Number(info.sing_box_forkop) === 1,
+          singBoxTiny: Number(info.sing_box_tiny) === 1,
+          singBoxTailscale: Number(info.sing_box_tailscale) === 1,
+        };
+        if (
+          Object.entries(coreFlags).every(
+            ([key, value]) => uiCapabilities[key] === value,
+          )
+        )
+          return;
+        Object.assign(uiCapabilities, coreFlags);
+        if (serverSectionRef)
+          server.applyServerCapabilities(serverSectionRef, uiCapabilities);
+      });
+      if (typeof window !== "undefined")
+        window.addEventListener("pagehide", unsubscribe, { once: true });
+    }
 
     const applyUiState = function (data) {
       const result = updateUiCapabilities(data?.capabilities || data || {});
@@ -259,6 +288,11 @@ const EntryPoint = {
             sing_box_extended:
               serverCapabilities?.success &&
               Number(serverCapabilities.data?.sing_box_extended) === 1
+                ? 1
+                : 0,
+            sing_box_forkop:
+              serverCapabilities?.success &&
+              Number(serverCapabilities.data?.sing_box_forkop) === 1
                 ? 1
                 : 0,
             sing_box_tiny:

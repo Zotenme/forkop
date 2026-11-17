@@ -77,6 +77,10 @@ function constants_map() {
     c.SB_CLASH_API_CONTROLLER_PORT = env("SB_CLASH_API_CONTROLLER_PORT", "9090");
     c.SB_VARIANT_STATE_FILE = env("SB_VARIANT_STATE_FILE", "/etc/forkop/sing-box-variant");
     c.SB_VERSION_STATE_FILE = env("SB_VERSION_STATE_FILE", "/etc/forkop/sing-box-version");
+    c.SB_BINARY_PATH = env("SB_BINARY_PATH", "/usr/bin/sing-box");
+    c.SB_SERVICE_INIT = env("SB_SERVICE_INIT", "/etc/init.d/sing-box");
+    c.SB_FORKOP_VARIANT_FILE = env("SB_FORKOP_VARIANT_FILE", "/usr/share/sing-box-forkop/variant");
+    c.SB_FORKOP_RELEASE_REPO = env("SB_FORKOP_RELEASE_REPO", "ushan0v/sing-box-forkop");
 
     c.GITHUB_RAW_URL = env("GITHUB_RAW_URL", "https://raw.githubusercontent.com/itdoginfo/allow-domains/main");
     c.SRS_MAIN_URL = env("SRS_MAIN_URL", "https://github.com/itdoginfo/allow-domains/releases/latest/download");

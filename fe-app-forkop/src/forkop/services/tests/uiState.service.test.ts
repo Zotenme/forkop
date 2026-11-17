@@ -426,4 +426,47 @@ describe('applyUiStateToStore', () => {
       true,
     );
   });
+  it('restores a running tiny installation without granting full-core capabilities', () => {
+    store.set({
+      diagnosticsSystemInfo: {
+        ...store.get().diagnosticsSystemInfo,
+        sing_box_version: '1.14.3-extended-2.7.3',
+      },
+    });
+    applyUiStateToStore(
+      createUiState(
+        {
+          component: [
+            {
+              success: true,
+              running: true,
+              job_id: 'tiny-install',
+              component: 'sing_box',
+              action: 'install_forkop_tiny',
+              message: '',
+              current_version: '',
+              latest_version: '',
+              changed: false,
+            },
+          ],
+        },
+        {
+          sing_box_forkop: 1,
+          sing_box_extended: 0,
+          sing_box_tiny: 1,
+          sing_box_compressed: 0,
+          sing_box_tailscale: 0,
+        },
+      ),
+    );
+    expect(store.get().updatesActions.singBoxInstallForkopTiny.loading).toBe(
+      true,
+    );
+    expect(store.get().diagnosticsSystemInfo).toMatchObject({
+      sing_box_forkop: 1,
+      sing_box_extended: 0,
+      sing_box_tiny: 1,
+      sing_box_tailscale: 0,
+    });
+  });
 });

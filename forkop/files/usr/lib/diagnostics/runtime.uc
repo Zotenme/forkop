@@ -1,6 +1,7 @@
 #!/usr/bin/env ucode
 
 let fs = require("fs");
+let core_features = require("singbox.features");
 let constants = require("core.constants");
 let core_ip = require("core.ip");
 let uci_core = require("core.uci");
@@ -979,6 +980,7 @@ function sing_box_component_action_running() {
 function sing_box_live_probe_disabled() {
     return sing_box_marker_is("extended") ||
         sing_box_marker_is("extended-compressed") ||
+        sing_box_marker_is("forkop-tiny") ||
         sing_box_component_action_running();
 }
 
@@ -990,6 +992,8 @@ function sing_box_capability_flags(sing_box_version, sing_box_version_output) {
     let extended = 0;
     let tiny = 0;
     let tailscale = 0;
+    if (core_features.forkop_tiny())
+        return { extended: 0, tiny: 1, tailscale: 0, forkop: 1 };
 
     if (sing_box_marker_is("extended") ||
         sing_box_marker_is("extended-compressed") ||
@@ -1008,7 +1012,7 @@ function sing_box_capability_flags(sing_box_version, sing_box_version_output) {
     else if (tiny == 0 && sing_box_component_action_running())
         tailscale = 1;
 
-    return { extended, tiny, tailscale };
+    return { extended, tiny, tailscale, forkop: 0 };
 }
 
 function provider_installed(runtime_uc) {
@@ -1078,6 +1082,7 @@ function build_system_info() {
         luci_app_version,
         sing_box_version,
         sing_box_extended: flags.extended,
+        sing_box_forkop: flags.forkop,
         sing_box_tiny: flags.tiny,
         sing_box_compressed,
         sing_box_tailscale: flags.tailscale,
@@ -1126,6 +1131,7 @@ function get_server_capabilities() {
     let flags = sing_box_capability_flags(sing_box_version, sing_box_version_output);
     write_json({
         sing_box_extended: flags.extended,
+        sing_box_forkop: flags.forkop,
         sing_box_tiny: flags.tiny,
         sing_box_tailscale: flags.tailscale
     });
@@ -1497,6 +1503,7 @@ function check_sing_box() {
         sing_box_installed,
         sing_box_version_ok,
         sing_box_extended,
+        sing_box_forkop: sing_box_installed && core_features.forkop_tiny() ? 1 : 0,
         sing_box_service_exist,
         sing_box_autostart_disabled,
         sing_box_process_running,

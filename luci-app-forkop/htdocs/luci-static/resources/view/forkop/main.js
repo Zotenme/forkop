@@ -4333,6 +4333,7 @@ var initialDiagnosticStore = {
     singBoxCheck: { loading: false },
     singBoxInstall: { loading: false },
     singBoxInstallExtended: { loading: false },
+    singBoxInstallForkopTiny: { loading: false },
     singBoxInstallExtendedCompressed: { loading: false },
     zapretCheck: { loading: false },
     zapretInstall: { loading: false },
@@ -4684,6 +4685,7 @@ var componentActionKeyMap = {
   "sing_box:check_update": "singBoxCheck",
   "sing_box:install": "singBoxInstall",
   "sing_box:install_extended": "singBoxInstallExtended",
+  "sing_box:install_forkop_tiny": "singBoxInstallForkopTiny",
   "sing_box:install_extended_compressed": "singBoxInstallExtendedCompressed",
   "zapret:check_update": "zapretCheck",
   "zapret:install": "zapretInstall",
@@ -4723,19 +4725,20 @@ function formatSingBoxVersion(value) {
   if (normalizedValue.sing_box_extended && normalizedValue.sing_box_compressed) {
     variant = _("compressed");
   } else if (normalizedValue.sing_box_tiny) {
-    variant = _("tiny");
+    variant = normalizedValue.sing_box_forkop ? "Forkop tiny" : _("tiny");
   }
   return variant ? `${version} (${variant})` : version;
 }
 function normalizeSingBoxVariantFields(value) {
   const versionExtended = isExtendedSingBoxVersion(value.sing_box_version);
-  const singBoxExtended = Boolean(value.sing_box_extended) || versionExtended;
+  const forkopTiny = Boolean(value.sing_box_forkop);
+  const singBoxExtended = !forkopTiny && (Boolean(value.sing_box_extended) || versionExtended);
   return {
     ...value,
     sing_box_extended: singBoxExtended ? 1 : 0,
-    sing_box_tiny: singBoxExtended ? 0 : value.sing_box_tiny ? 1 : 0,
+    sing_box_tiny: forkopTiny ? 1 : singBoxExtended ? 0 : value.sing_box_tiny ? 1 : 0,
     sing_box_compressed: singBoxExtended && value.sing_box_compressed ? 1 : 0,
-    sing_box_tailscale: singBoxExtended || value.sing_box_tailscale ? 1 : 0
+    sing_box_tailscale: forkopTiny ? 0 : singBoxExtended || value.sing_box_tailscale ? 1 : 0
   };
 }
 
@@ -4789,6 +4792,7 @@ function getEmptyUpdatesActions() {
     singBoxCheck: { loading: false },
     singBoxInstall: { loading: false },
     singBoxInstallExtended: { loading: false },
+    singBoxInstallForkopTiny: { loading: false },
     singBoxInstallExtendedCompressed: { loading: false },
     zapretCheck: { loading: false },
     zapretInstall: { loading: false },
@@ -4835,6 +4839,7 @@ function applyServiceState(uiState) {
     server_inbounds_enabled_count: uiState.capabilities.server_inbounds_enabled_count
   };
   nextSystemInfo.sing_box_extended = uiState.capabilities.sing_box_extended;
+  nextSystemInfo.sing_box_forkop = uiState.capabilities.sing_box_forkop ?? 0;
   nextSystemInfo.sing_box_tiny = uiState.capabilities.sing_box_tiny;
   nextSystemInfo.sing_box_compressed = uiState.capabilities.sing_box_compressed;
   nextSystemInfo.sing_box_tailscale = uiState.capabilities.sing_box_tailscale;
@@ -8355,6 +8360,7 @@ var UNKNOWN_SYSTEM_INFO = {
   luci_app_version: _("unknown"),
   sing_box_version: _("unknown"),
   sing_box_extended: 0,
+  sing_box_forkop: 0,
   sing_box_tiny: 0,
   sing_box_compressed: 0,
   sing_box_tailscale: 1,
@@ -13020,13 +13026,22 @@ function patchSystemInfoAfterMutation(result) {
   }
   if (result.component === "sing_box") {
     nextSystemInfo.sing_box_version = version;
+    if (result.action === "install_forkop_tiny") {
+      nextSystemInfo.sing_box_forkop = 1;
+      nextSystemInfo.sing_box_extended = 0;
+      nextSystemInfo.sing_box_tiny = 1;
+      nextSystemInfo.sing_box_compressed = 0;
+      nextSystemInfo.sing_box_tailscale = 0;
+    }
     if (result.action === "install_extended") {
+      nextSystemInfo.sing_box_forkop = 0;
       nextSystemInfo.sing_box_extended = 1;
       nextSystemInfo.sing_box_tiny = 0;
       nextSystemInfo.sing_box_compressed = 0;
       nextSystemInfo.sing_box_tailscale = 1;
     }
     if (result.action === "install_extended_compressed") {
+      nextSystemInfo.sing_box_forkop = 0;
       nextSystemInfo.sing_box_extended = 1;
       nextSystemInfo.sing_box_tiny = 0;
       nextSystemInfo.sing_box_compressed = 1;
@@ -13384,6 +13399,15 @@ function getComponentCards() {
     "singBoxInstall",
     singBoxInstalled
   );
+  if (!systemInfo.sing_box_forkop) {
+    singBoxActions.push({
+      key: "singBoxInstallForkopTiny",
+      text: _("Tiny (less flash and RAM)"),
+      icon: renderDownloadIcon24,
+      component: "sing_box",
+      action: "install_forkop_tiny"
+    });
+  }
   if (!singBoxExtended) {
     singBoxActions.push({
       key: "singBoxInstallExtended",
@@ -13396,7 +13420,7 @@ function getComponentCards() {
   if (!singBoxExtendedCompressed) {
     singBoxActions.push({
       key: "singBoxInstallExtendedCompressed",
-      text: "Extended compressed",
+      text: _("Extended compressed (uses more RAM)"),
       icon: renderDownloadIcon24,
       component: "sing_box",
       action: "install_extended_compressed"

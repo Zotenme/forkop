@@ -18,6 +18,7 @@ function getEmptyUpdatesActions(): StoreType['updatesActions'] {
     singBoxCheck: { loading: false },
     singBoxInstall: { loading: false },
     singBoxInstallExtended: { loading: false },
+    singBoxInstallForkopTiny: { loading: false },
     singBoxInstallExtendedCompressed: { loading: false },
     zapretCheck: { loading: false },
     zapretInstall: { loading: false },
@@ -76,6 +77,7 @@ function applyServiceState(uiState: Forkop.UiState) {
   };
 
   nextSystemInfo.sing_box_extended = uiState.capabilities.sing_box_extended;
+  nextSystemInfo.sing_box_forkop = uiState.capabilities.sing_box_forkop ?? 0;
   nextSystemInfo.sing_box_tiny = uiState.capabilities.sing_box_tiny;
   nextSystemInfo.sing_box_compressed = uiState.capabilities.sing_box_compressed;
   nextSystemInfo.sing_box_tailscale = uiState.capabilities.sing_box_tailscale;

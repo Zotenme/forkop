@@ -1,6 +1,7 @@
 #!/usr/bin/env ucode
 
 let fs = require("fs");
+let core_features = require("singbox.features");
 let uci_core = require("core.uci");
 let common = require("core.common");
 
@@ -249,6 +250,8 @@ function sing_box_version() {
         return "";
     if (sing_box_marker_is("extended-compressed"))
         return sing_box_version_state();
+    if (sing_box_marker_is("forkop-tiny") && sing_box_version_state() != "")
+        return sing_box_version_state();
     return first_line_last_field(sing_box_version_output());
 }
 
@@ -307,6 +310,8 @@ function sing_box_is_tiny(version, version_output) {
     version = as_string(version);
     version_output = as_string(version_output);
 
+    if (core_features.forkop_tiny())
+        return true;
     if (command_exists("sing-box") && sing_box_marker_is("extended-compressed"))
         return false;
     if (sing_box_is_extended(version != "" ? version : sing_box_version()))
@@ -323,6 +328,8 @@ function sing_box_variant() {
 
     if (!command_exists("sing-box"))
         return "not-installed";
+    if (core_features.forkop_tiny())
+        return "forkop-tiny";
     if (sing_box_marker_is("extended-compressed"))
         return "extended-compressed";
 
@@ -444,8 +451,8 @@ function remove_managed_service_script() {
 function configure_service() {
     let settings = uci_settings();
 
-    if (sing_box_compressed_marker_set() && !install_managed_service_script()) {
-        log_message("Failed to install managed sing-box service for compressed binary. Aborted.", "fatal");
+    if ((sing_box_compressed_marker_set() || core_features.forkop_tiny()) && !install_managed_service_script()) {
+        log_message("Failed to install managed sing-box service for the binary core. Aborted.", "fatal");
         exit(1);
     }
 
@@ -722,7 +729,7 @@ function init_config(populate_nft, caches_prepared, no_refresh, prepared_deferre
             temp_config,
             service_listen_address_value(settings),
             mwan3_active ? "1" : "0",
-            sing_box_is_extended(current_sing_box_version) ? "1" : "0",
+            (sing_box_is_extended(current_sing_box_version) || core_features.forkop_tiny()) ? "1" : "0",
             deferred_sections,
             current_sing_box_version
         ]) + " >" + shell_quote(runtime_log) + " 2>&1"
@@ -827,6 +834,8 @@ else if (mode == "restore-variant-marker")
     exit(sing_box_restore_variant_marker(ARGV[1]) ? 0 : 1);
 else if (mode == "marker-is")
     exit(sing_box_marker_is(ARGV[1]) ? 0 : 1);
+else if (mode == "is-forkop")
+    exit(core_features.forkop_tiny() ? 0 : 1);
 else if (mode == "is-extended")
     exit(sing_box_is_extended(ARGV[1]) ? 0 : 1);
 else if (mode == "is-tiny")

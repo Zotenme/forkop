@@ -18,6 +18,7 @@ FORKOP_LEGACY_DETECTED=0
 FORKOP_I18N_REQUESTED=0
 INSTALLER_LANG="en"
 SING_BOX_INSTALL_VARIANT=""
+SING_BOX_REQUESTED_VARIANT=""
 
 FORKOP_RELEASE_JSON=""
 FORKOP_RELEASE_TAG=""
@@ -63,14 +64,23 @@ Installs or updates Forkop packages:
   - luci-app-forkop
   - luci-i18n-forkop-ru when requested or when LuCI language is Russian
 
-Also installs sing-box-extended from GitHub OpenWrt packages, which Forkop
-requires; a sing-box package from OpenWrt feeds is replaced with it.
+Core selection: --variant tiny|extended|extended-compressed|auto
+  tiny                 sing-box-forkop tiny; lower flash and RAM use
+  extended             full sing-box-extended
+  extended-compressed  smaller executable, higher RAM use
+Without --variant, a new installation offers a choice and recommends a core
+based on free flash. Updates keep the installed compatible core.
 EOF
 }
 
 parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
+            --variant)
+                [ "$#" -ge 2 ] || fail "--variant requires tiny, extended, extended-compressed or auto"
+                shift
+                case "$1" in tiny|extended|extended-compressed|auto) SING_BOX_REQUESTED_VARIANT="$1" ;; *) fail "Unknown core variant: $1" ;; esac
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -1633,9 +1643,9 @@ installer_text() {
             i18n_prompt) printf '%s\n' "Установить русский пакет интерфейса?" ;;
             i18n_skip) printf '%s\n' "Продолжаю без русского пакета интерфейса." ;;
             luci_ru) printf '%s\n' "Русский пакет интерфейса будет установлен автоматически." ;;
-            sing_box_install_msg) printf '%s\n' "Устанавливаю sing-box-extended: Forkop работает только с ним." ;;
-            sing_box_replace_msg) printf '%s\n' "sing-box из пакетов OpenWrt будет заменён на sing-box-extended: Forkop работает только с ним." ;;
-            sing_box_skip_msg) printf '%s\n' "sing-box-extended уже установлен." ;;
+            sing_box_install_msg) printf '%s\n' "Устанавливаю выбранное ядро sing-box." ;;
+            sing_box_replace_msg) printf '%s\n' "Ядро sing-box из пакетов OpenWrt будет заменено выбранной сборкой." ;;
+            sing_box_skip_msg) printf '%s\n' "Установленное ядро sing-box сохранено." ;;
             *) printf '%s\n' "$key" ;;
         esac
         return 0
@@ -1650,9 +1660,9 @@ installer_text() {
         i18n_prompt) printf '%s\n' "Install the Russian interface language package?" ;;
         i18n_skip) printf '%s\n' "Continuing without the Russian interface language package." ;;
         luci_ru) printf '%s\n' "The Russian interface package will be installed automatically." ;;
-        sing_box_install_msg) printf '%s\n' "Installing sing-box-extended: Forkop requires it." ;;
-        sing_box_replace_msg) printf '%s\n' "The sing-box package from OpenWrt feeds will be replaced with sing-box-extended: Forkop requires it." ;;
-        sing_box_skip_msg) printf '%s\n' "sing-box-extended is already installed." ;;
+        sing_box_install_msg) printf '%s\n' "Installing the selected sing-box core." ;;
+        sing_box_replace_msg) printf '%s\n' "The sing-box package from OpenWrt feeds will be replaced with the selected core." ;;
+        sing_box_skip_msg) printf '%s\n' "Keeping the installed sing-box core." ;;
         *) printf '%s\n' "$key" ;;
     esac
 }
@@ -1777,26 +1787,88 @@ sing_box_extended_is_present() {
         { command_exists sing-box && sing-box version 2>/dev/null | grep -Fq extended; }
 }
 
-# Forkop needs sing-box 1.14 or newer, which only sing-box-extended provides.
-select_sing_box_installation() {
-    if [ "$FORKOP_LEGACY_DETECTED" -eq 1 ] &&
-        [ -r /etc/init.d/sing-box ] &&
-        grep -Fq 'managed sing-box service for binary variants' /etc/init.d/sing-box; then
-        SING_BOX_INSTALL_VARIANT="extended-compressed"
-        msg "The legacy binary-managed sing-box variant will be reinstalled for Forkop"
-        return 0
-    fi
-
-    if sing_box_extended_is_present; then
-        SING_BOX_INSTALL_VARIANT=""
-        return 0
-    fi
-
-    SING_BOX_INSTALL_VARIANT="extended"
-    if sing_box_is_present; then
-        msg "$(installer_text sing_box_replace_msg)"
+# Estimates include headroom for Forkop/dependencies; final backend checks use
+# the downloaded artifact size. Filesystem compression is not assumed.
+core_recommendation() {
+    core_free_kb="$1"
+    case "$core_free_kb" in ''|*[!0-9]*) printf '%s\n' tiny; return ;; esac
+    if [ "$core_free_kb" -ge 112640 ]; then
+        printf '%s\n' extended
+    elif [ "$core_free_kb" -ge 32768 ]; then
+        printf '%s\n' tiny
+    elif [ "$core_free_kb" -ge 28672 ]; then
+        printf '%s\n' extended-compressed
     else
-        msg "$(installer_text sing_box_install_msg)"
+        printf '%s\n' none
+    fi
+}
+
+select_sing_box_installation() {
+    # Retain the chosen core on upgrades, including the legacy binary variant.
+    installed_marker="$(cat /etc/forkop/sing-box-variant 2>/dev/null || true)"
+    if [ -z "$SING_BOX_REQUESTED_VARIANT" ]; then
+        case "$installed_marker" in
+            forkop-tiny|extended|extended-compressed)
+                if command_exists sing-box; then SING_BOX_INSTALL_VARIANT=""; return 0; fi
+                ;;
+        esac
+        if sing_box_extended_is_present ||
+            { command_exists sing-box && [ "$(cat /usr/share/sing-box-forkop/variant 2>/dev/null)" = tiny ]; }; then
+            SING_BOX_INSTALL_VARIANT=""
+            return 0
+        fi
+        if [ "$FORKOP_LEGACY_DETECTED" -eq 1 ] && [ -r /etc/init.d/sing-box ] &&
+            grep -Fq 'managed sing-box service for binary variants' /etc/init.d/sing-box; then
+            SING_BOX_INSTALL_VARIANT="extended-compressed"
+            return 0
+        fi
+    fi
+
+    core_free_kb="$(df -k /overlay 2>/dev/null | awk 'NR==2 {print $4}')"
+    [ -n "$core_free_kb" ] || core_free_kb="$(df -k / 2>/dev/null | awk 'NR==2 {print $4}')"
+    recommended_core="$(core_recommendation "$core_free_kb")"
+    if [ -n "$core_free_kb" ]; then
+        if installer_is_ru; then msg "Свободно flash: $((core_free_kb / 1024)) МиБ"
+        else msg "Free flash: $((core_free_kb / 1024)) MiB"; fi
+    fi
+    if [ "$recommended_core" = none ]; then
+        warn "Less than 28 MiB of free flash; installation may not fit. Free space before continuing."
+        case "$SING_BOX_REQUESTED_VARIANT" in
+            ''|auto) fail "No core is recommended with this amount of free flash; free space or explicitly choose --variant" ;;
+        esac
+    fi
+    if installer_is_ru; then
+        [ "$recommended_core" = none ] || msg "Рекомендуемое ядро: $recommended_core (оценка по свободной flash)"
+        msg "Tiny: VLESS/Reality/XHTTP, Trojan, Shadowsocks, SOCKS/HTTP, Hysteria2/TUIC; без VMess, WireGuard, Tailscale и MTProto."
+        msg "Extended: полный набор функций. Extended compressed: меньше flash, но заметно больше расход RAM."
+    else
+        [ "$recommended_core" = none ] || msg "Recommended core: $recommended_core (estimated from free flash)"
+        msg "Tiny: VLESS/Reality/XHTTP, Trojan, Shadowsocks, SOCKS/HTTP, Hysteria2/TUIC; no VMess, WireGuard, Tailscale or MTProto."
+        msg "Extended: full feature set. Extended compressed: less flash, but significantly more RAM."
+    fi
+
+    case "$SING_BOX_REQUESTED_VARIANT" in
+        tiny|extended|extended-compressed) SING_BOX_INSTALL_VARIANT="$SING_BOX_REQUESTED_VARIANT"; return 0 ;;
+        auto) SING_BOX_INSTALL_VARIANT="$recommended_core"; return 0 ;;
+    esac
+    SING_BOX_INSTALL_VARIANT="$recommended_core"
+    if [ -t 0 ] || [ -t 1 ]; then
+        while :; do
+            if installer_is_ru; then
+                printf 'Ядро [1=Tiny, 2=Extended, 3=Extended compressed; Enter=%s]: ' "$recommended_core" > /dev/tty
+            else
+                printf 'Core [1=Tiny, 2=Extended, 3=Extended compressed; Enter=%s]: ' "$recommended_core" > /dev/tty
+            fi
+            core_choice=""
+            read -r core_choice < /dev/tty || break
+            case "$core_choice" in
+                '') break ;;
+                1|tiny) SING_BOX_INSTALL_VARIANT=tiny; break ;;
+                2|extended) SING_BOX_INSTALL_VARIANT=extended; break ;;
+                3|extended-compressed) SING_BOX_INSTALL_VARIANT=extended-compressed; break ;;
+                *) warn "Choose 1, 2 or 3" ;;
+            esac
+        done
     fi
 }
 
@@ -1808,6 +1880,9 @@ install_selected_sing_box() {
         "")
             msg "$(installer_text sing_box_skip_msg)"
             return 0
+            ;;
+        tiny)
+            action="install_forkop_tiny"
             ;;
         extended)
             action="install_extended"

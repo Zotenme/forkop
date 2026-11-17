@@ -195,6 +195,7 @@ export interface StoreType {
     luci_app_version: string;
     sing_box_version: string;
     sing_box_extended: number;
+    sing_box_forkop?: number;
     sing_box_tiny: number;
     sing_box_compressed: number;
     sing_box_tailscale: number;
@@ -214,6 +215,7 @@ export interface StoreType {
     singBoxCheck: { loading: boolean };
     singBoxInstall: { loading: boolean };
     singBoxInstallExtended: { loading: boolean };
+    singBoxInstallForkopTiny: { loading: boolean };
     singBoxInstallExtendedCompressed: { loading: boolean };
     zapretCheck: { loading: boolean };
     zapretInstall: { loading: boolean };

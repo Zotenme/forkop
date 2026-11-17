@@ -12,6 +12,7 @@ const UNKNOWN_SYSTEM_INFO: StoreType['diagnosticsSystemInfo'] = {
   luci_app_version: _('unknown'),
   sing_box_version: _('unknown'),
   sing_box_extended: 0,
+  sing_box_forkop: 0,
   sing_box_tiny: 0,
   sing_box_compressed: 0,
   sing_box_tailscale: 1,

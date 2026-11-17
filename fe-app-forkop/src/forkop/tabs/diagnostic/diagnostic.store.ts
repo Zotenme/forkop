@@ -129,6 +129,7 @@ export const initialDiagnosticStore: Pick<
     singBoxCheck: { loading: false },
     singBoxInstall: { loading: false },
     singBoxInstallExtended: { loading: false },
+    singBoxInstallForkopTiny: { loading: false },
     singBoxInstallExtendedCompressed: { loading: false },
     zapretCheck: { loading: false },
     zapretInstall: { loading: false },

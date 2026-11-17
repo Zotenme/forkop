@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The sing-box-extended package needs about 100 MB of flash. When it does not
-# fit, the component action must install the compressed binary instead of
-# letting opkg fail with "No space left on device".
+# fit, an explicit full-core selection must fail before package removal/install
+# and tell the user to select a smaller core.
 set -eo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -108,8 +108,11 @@ run_install() {
 
 # 34 MB free: the package (about 95 MB) does not fit.
 run_install 35020
-grep -Fq 'curl https://api.github.com/assets/tgz' "$FAKE_LOG" ||
-  fail "low flash space must switch to the compressed sing-box-extended binary: $(cat "$WORK_DIR/out.json")"
+grep -Fq 'Not enough free flash space for Extended' "$WORK_DIR/out.json" ||
+  fail "low flash space must explain the rejected full-core selection: $(cat "$WORK_DIR/out.json")"
+if grep -Fq 'curl https://api.github.com/assets/tgz' "$FAKE_LOG"; then
+  fail "an explicit variant must not silently switch to compressed"
+fi
 grep -q '^opkg install' "$FAKE_LOG" &&
   fail "low flash space must not run opkg install for the sing-box-extended package"
 

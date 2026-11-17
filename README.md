@@ -10,7 +10,23 @@ Forkop — сервис маршрутизации трафика для OpenWrt
 sh <(wget -O - https://raw.githubusercontent.com/Zotenme/forkop/main/install.sh)
 ```
 
-Forkop работает на [sing-box-extended](https://github.com/shtorm-7/sing-box-extended) 1.14 и новее. Установщик ставит его сам, а sing-box из пакетов OpenWrt заменяет на него.
+Forkop работает на ядрах 1.14 и новее:
+
+| Вариант | Когда выбирать |
+| --- | --- |
+| **Tiny** ([sing-box-forkop](https://github.com/ushan0v/sing-box-forkop)) | Мало flash или RAM. Есть VLESS/Reality/Vision, XHTTP, Trojan, Shadowsocks, SOCKS/HTTP, Hysteria2/TUIC. Нет VMess, WireGuard, Tailscale и MTProto. |
+| **Extended** ([sing-box-extended](https://github.com/shtorm-7/sing-box-extended)) | Нужен полный набор функций и достаточно flash. |
+| **Extended compressed** | Полный набор функций в сжатом бинарнике. Экономит flash, но требует заметно больше RAM, особенно при обновлении списков. |
+
+При первой установке показываются свободное место, рекомендованный вариант и меню выбора. Оценка консервативная: от 110 МиБ свободной flash рекомендуется Extended, от 32 МиБ — Tiny, от 28 МиБ — compressed. Итоговая проверка места выполняется перед заменой ядра. Размеры зависят от архитектуры и файловой системы; рекомендации не гарантируют, что все зависимости поместятся.
+
+Для выбора без диалога передайте `--variant tiny`, `--variant extended`, `--variant extended-compressed` или `--variant auto`:
+
+```sh
+sh <(wget -O - https://raw.githubusercontent.com/Zotenme/forkop/main/install.sh) --variant tiny
+```
+
+На вкладке компонентов можно сменить ядро после установки. Обновления сохраняют выбранный вариант. Перед заменой на Tiny проверяется совместимость текущей сгенерированной конфигурации; при ошибке запуска восстанавливаются прежний бинарник и init-скрипт. Tiny устанавливается из проверенного IPK как отдельный бинарник под управлением Forkop; `opkg`/`apk` им не управляет. Обычный `sing-box-tiny` из OpenWrt — другое ядро и не является этим вариантом.
 
 ### Возможности
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env ucode
 
 let fs = require("fs");
+let core_features = require("singbox.features");
 let uci_core = require("core.uci");
 
 const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
@@ -877,6 +878,7 @@ function server_inbounds_enabled_count() {
 function capability_flags() {
     let result = {
         sing_box_extended: 0,
+        sing_box_forkop: 0,
         sing_box_tiny: 0,
         sing_box_compressed: 0,
         sing_box_tailscale: 0,
@@ -887,7 +889,11 @@ function capability_flags() {
     };
 
     if (file_executable(SING_BOX_BIN_PATH)) {
-        if (marker_is("extended-compressed")) {
+        if (core_features.forkop_tiny()) {
+            result.sing_box_forkop = 1;
+            result.sing_box_tiny = 1;
+        }
+        else if (marker_is("extended-compressed")) {
             result.sing_box_extended = 1;
             result.sing_box_compressed = 1;
             result.sing_box_tailscale = 1;

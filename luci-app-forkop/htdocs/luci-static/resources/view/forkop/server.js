@@ -520,6 +520,7 @@ function addOptionValue(option, value, label) {
 function normalizeServerCapabilities(capabilities) {
   return {
     singBoxExtended: Boolean(capabilities?.singBoxExtended),
+    singBoxForkop: Boolean(capabilities?.singBoxForkop),
     singBoxTailscale: capabilities?.singBoxTailscale !== false,
   };
 }
@@ -542,6 +543,7 @@ function populateProtocolValues(option, capabilities) {
   }
 
   Object.entries(BASE_PROTOCOL_LABELS).forEach(([value, label]) => {
+    if (normalized.singBoxForkop && value === "vmess") return;
     addOptionValue(option, value, label);
   });
 
@@ -586,7 +588,10 @@ function applyServerCapabilities(sectionRef, capabilities) {
   }
 
   if (options.transport) {
-    populateTransportValues(options.transport, normalized.singBoxExtended);
+    populateTransportValues(
+      options.transport,
+      normalized.singBoxExtended || normalized.singBoxForkop,
+    );
   }
 }
 
@@ -2759,7 +2764,7 @@ function createServerContent(section, options = {}) {
 
   o = section.option(form.ListValue, "transport", _("Transport"));
   section.serverCapabilityOptions.transport = o;
-  populateTransportValues(o, singBoxExtended);
+  populateTransportValues(o, singBoxExtended || capabilities.singBoxForkop);
   o.default = "tcp";
   o.rmempty = false;
   o.modalonly = true;
