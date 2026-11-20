@@ -57,10 +57,16 @@ jobs:
               output.write(f'release_notes<<{delimiter}\n{notes}\n{delimiter}\n')
           PY
 
+  backend-tests:
+    name: Backend tests
+    uses: ./.github/workflows/backend-ci.yml
+
   build:
     name: Build Forkop release packages
     runs-on: ubuntu-24.04
-    needs: preparation
+    needs:
+      - preparation
+      - backend-tests
     steps:
       - uses: actions/checkout@v5.0.0
 
