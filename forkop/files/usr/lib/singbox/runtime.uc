@@ -448,6 +448,11 @@ function remove_managed_service_script() {
     remove_file("/etc/init.d/sing-box");
 }
 
+function configure_service_fail(message) {
+    log_message(message, "fatal");
+    exit(1);
+}
+
 function configure_service() {
     let settings = uci_settings();
 
@@ -457,19 +462,19 @@ function configure_service() {
     }
 
     if (!ensure_sing_box_main_section())
-        exit(1);
+        configure_service_fail("Failed to create the 'sing-box.main' UCI section in /etc/config/sing-box. Aborted.");
 
     let changed = false;
     if (uci_get_option("sing-box", "main", "enabled") != "1") {
         if (!uci_set_option("sing-box", "main", "enabled", "1"))
-            exit(1);
+            configure_service_fail("Failed to set sing-box.main.enabled. Aborted.");
         changed = true;
         log_message("sing-box service has been enabled", "info");
     }
 
     if (uci_get_option("sing-box", "main", "user") != "root") {
         if (!uci_set_option("sing-box", "main", "user", "root"))
-            exit(1);
+            configure_service_fail("Failed to set sing-box.main.user. Aborted.");
         changed = true;
         log_message("sing-box service user has been changed to root", "info");
     }
@@ -478,13 +483,13 @@ function configure_service() {
     let conffile = uci_get_option("sing-box", "main", "conffile");
     if (conffile != config_path) {
         if (!uci_set_option("sing-box", "main", "conffile", config_path))
-            exit(1);
+            configure_service_fail("Failed to set sing-box.main.conffile. Aborted.");
         changed = true;
         log_message("sing-box service config path set to " + config_path, "info");
     }
 
     if (changed && !uci_commit("sing-box"))
-        exit(1);
+        configure_service_fail("Failed to commit /etc/config/sing-box. Aborted.");
 
     if (file_exists("/etc/rc.d/S99sing-box")) {
         log_message("Disabling standalone sing-box autostart", "info");

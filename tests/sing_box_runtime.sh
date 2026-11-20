@@ -51,6 +51,13 @@ FORKOP_UCI_CONFIG_DIR="$WORK_DIR/uci-config" \
   fail "core.uci must not overwrite an existing UCI package file"
 grep -Fq 'ensure_package_file(parts.package) || !load(parts.package)' "$UCI_CORE_UC" ||
   fail "core.uci must create missing UCI package files when setting section options"
+configure_service_body="$(awk '/^function configure_service\(\)/ { inside = 1; next } inside && /^function / { exit } inside' "$SINGBOX_RUNTIME_UC")"
+[ -n "$configure_service_body" ] ||
+  fail "singbox/runtime.uc must define configure_service"
+silent_exits="$(printf '%s\n' "$configure_service_body" | grep -c 'exit(1)' || true)"
+logged_exits="$(printf '%s\n' "$configure_service_body" | grep -c '"fatal"' || true)"
+[ "$silent_exits" -le "$logged_exits" ] ||
+  fail "configure_service must log the reason before every exit(1)"
 grep -Fq 'mode == "service-listen-address"' "$SINGBOX_RUNTIME_UC" ||
   fail "singbox/runtime.uc must own service listen address detection"
 grep -Fq 'mode == "service-proxy-address"' "$SINGBOX_RUNTIME_UC" ||

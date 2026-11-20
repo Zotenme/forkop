@@ -232,6 +232,8 @@ grep -Fxq start "$WORK_DIR/upgrade-managed.log" ||
 cat >"$WORK_DIR/recovery-bin" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FORKOP_RECOVERY_LOG:?}"
+[ "${FORKOP_RECOVERY_FAIL:-0}" = 1 ] && exit 1
+printf 'binary\n' >"${FORKOP_SING_BOX_BIN:?}"
 SH
 chmod 0755 "$WORK_DIR/recovery-bin"
 printf 'forkop-tiny\n' >"$WORK_DIR/managed-sing-box-variant"
@@ -250,5 +252,70 @@ FORKOP_BIN="$WORK_DIR/recovery-bin" \
   ucode -L "$FORKOP_LIB" "$PACKAGE_UC" postinst
 grep -Fxq 'component_action sing_box install_forkop_tiny' "$WORK_DIR/recovery.log" ||
   fail "package postinst must restore a missing managed sing-box binary after upgrade"
+[ -f "$WORK_DIR/managed-sing-box-bin" ] ||
+  fail "package postinst recovery fixture must restore the binary"
+[ "$(grep -c '^start$' "$WORK_DIR/upgrade-managed.log")" = 2 ] ||
+  fail "package postinst must start Forkop after restoring the managed sing-box binary"
+
+# Recovery without network: postinst must not fail the package manager and
+# must not start Forkop without a core.
+printf '1\n' >"$FORKOP_PACKAGE_UPGRADE_STATE"
+: >"$WORK_DIR/recovery.log"
+: >"$WORK_DIR/upgrade-managed.log"
+rm -f "$WORK_DIR/managed-sing-box-bin"
+FORKOP_UCI_STATE_FILE="$WORK_DIR/upgrade-managed.state" \
+FORKOP_INIT="$WORK_DIR/upgrade-managed-init" \
+FORKOP_UPGRADE_LOG="$WORK_DIR/upgrade-managed.log" \
+FORKOP_SING_BOX_INIT="$WORK_DIR/managed-sing-box-init" \
+FORKOP_SING_BOX_BIN="$WORK_DIR/managed-sing-box-bin" \
+FORKOP_SING_BOX_CRONET="$WORK_DIR/managed-cronet" \
+SB_VARIANT_STATE_FILE="$WORK_DIR/managed-sing-box-variant" \
+FORKOP_RECOVERY_LOG="$WORK_DIR/recovery.log" \
+FORKOP_RECOVERY_FAIL=1 \
+FORKOP_BIN="$WORK_DIR/recovery-bin" \
+  ucode -L "$FORKOP_LIB" "$PACKAGE_UC" postinst ||
+  fail "package postinst must not fail when the managed sing-box binary cannot be restored"
+grep -Fxq 'component_action sing_box install_forkop_tiny' "$WORK_DIR/recovery.log" ||
+  fail "package postinst must try to restore the managed sing-box binary"
+if grep -Fxq start "$WORK_DIR/upgrade-managed.log"; then
+  fail "package postinst must not start Forkop without a sing-box core"
+fi
+[ ! -e "$FORKOP_PACKAGE_UPGRADE_STATE" ] ||
+  fail "package postinst must clear the upgrade state after a failed recovery"
+
+# A failing or hung start must not fail or block the package manager.
+cat >"$WORK_DIR/failing-init" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  start)
+    printf '%s\n' start >>"${FORKOP_UPGRADE_LOG:?}"
+    [ "${FORKOP_START_HANG:-0}" = 1 ] && exec sleep 30
+    exit 1
+    ;;
+esac
+SH
+chmod 0755 "$WORK_DIR/failing-init"
+printf 'binary\n' >"$WORK_DIR/managed-sing-box-bin"
+for hang in 0 1; do
+  printf '1\n' >"$FORKOP_PACKAGE_UPGRADE_STATE"
+  : >"$WORK_DIR/upgrade-managed.log"
+  started_at="$(date +%s)"
+  FORKOP_UCI_STATE_FILE="$WORK_DIR/upgrade-managed.state" \
+  FORKOP_INIT="$WORK_DIR/failing-init" \
+  FORKOP_UPGRADE_LOG="$WORK_DIR/upgrade-managed.log" \
+  FORKOP_START_HANG="$hang" \
+  FORKOP_PACKAGE_START_TIMEOUT=2 \
+  FORKOP_SING_BOX_BIN="$WORK_DIR/managed-sing-box-bin" \
+  SB_VARIANT_STATE_FILE="$WORK_DIR/managed-sing-box-variant" \
+    ucode -L "$FORKOP_LIB" "$PACKAGE_UC" postinst ||
+    fail "package postinst must not fail when Forkop start fails (hang=$hang)"
+  elapsed=$(( $(date +%s) - started_at ))
+  [ "$elapsed" -lt 15 ] ||
+    fail "package postinst must not wait for a hung Forkop start (hang=$hang, ${elapsed}s)"
+  grep -Fxq start "$WORK_DIR/upgrade-managed.log" ||
+    fail "package postinst must try to start Forkop (hang=$hang)"
+  [ ! -e "$FORKOP_PACKAGE_UPGRADE_STATE" ] ||
+    fail "package postinst must clear the upgrade state after a failed start (hang=$hang)"
+done
 
 printf 'package lifecycle checks passed\n'

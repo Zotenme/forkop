@@ -25,6 +25,7 @@ const SING_BOX_VARIANT_STATE_FILE = env("SB_VARIANT_STATE_FILE", "/etc/forkop/si
 const PACKAGE_UPGRADE_STATE = env("FORKOP_PACKAGE_UPGRADE_STATE", "/tmp/forkop-package-was-running");
 const PACKAGE_RECOVERY_LOCK_DIR = env("FORKOP_PACKAGE_RECOVERY_LOCK_DIR", "/tmp/forkop-package-recovery.lock");
 const PACKAGE_TEST_MODE = env("FORKOP_PACKAGE_TEST_MODE", "") != "";
+const PACKAGE_START_TIMEOUT = env("FORKOP_PACKAGE_START_TIMEOUT", "180");
 
 function shell_quote(value) {
     return "'" + replace(as_string(value), /'/g, "'\\''") + "'";
@@ -44,6 +45,23 @@ function normalize_status(status) {
 
 function command_success_from_args(args) {
     return normalize_status(system(command_from_args(args) + " >/dev/null 2>&1")) == 0;
+}
+
+function log_package(message, level) {
+    command_success_from_args([ "logger", "-t", "forkop", "[" + as_string(level || "info") + "] " + as_string(message) ]);
+}
+
+function command_success_with_timeout(args, timeout_seconds) {
+    timeout_seconds = as_string(timeout_seconds);
+    if (match(timeout_seconds, /^[1-9][0-9]*$/) == null)
+        timeout_seconds = "180";
+
+    // A hung command must never block opkg/apk: the package manager waits
+    // for postinst, and the Forkop updater waits for the package manager.
+    let command = command_from_args(args) + " >/dev/null 2>&1 </dev/null & pid=$!; " +
+        "( sleep " + timeout_seconds + "; kill $pid 2>/dev/null && echo timeout >&2 ) 2>/dev/null & watcher=$!; " +
+        "wait $pid 2>/dev/null; rc=$?; kill $watcher 2>/dev/null || true; wait $watcher 2>/dev/null || true; exit $rc";
+    return normalize_status(system(command_from_args([ "sh", "-c", command ]) + " >/dev/null 2>&1")) == 0;
 }
 
 function path_exists(path) {
@@ -126,8 +144,8 @@ function recover_managed_sing_box_binary() {
         return true;
 
     let action = variant == "forkop-tiny" ? "install_forkop_tiny" : "install_extended_compressed";
-    command_success_from_args([ "logger", "-t", "forkop", "[info] Restoring the managed sing-box binary after the Forkop package upgrade" ]);
-    return command_success_from_args([
+    log_package("Restoring the managed sing-box binary after the Forkop package upgrade", "info");
+    command_success_from_args([
         "env",
         "UPDATES_LOCK_DIR=" + PACKAGE_RECOVERY_LOCK_DIR,
         BIN_PATH,
@@ -135,6 +153,11 @@ function recover_managed_sing_box_binary() {
         "sing_box",
         action
     ]);
+    if (path_exists(SING_BOX_BIN))
+        return true;
+
+    log_package("Failed to restore the managed sing-box binary (" + variant + "). Reinstall the sing-box core on the Components tab", "error");
+    return false;
 }
 
 function remember_upgrade_state(action) {
@@ -161,20 +184,25 @@ function prerm_cleanup(action) {
     return remove_rt_tables_entry();
 }
 
+// postinst never fails because of the runtime: the package files are already
+// in place, and a failed postinst only leaves opkg/apk in a half-configured
+// state and makes the updater report a broken install.
 function postinst_restore() {
     if (env("IPKG_INSTROOT", "") != "")
         return true;
 
-    if (!recover_managed_sing_box_binary())
-        return false;
-
+    let core_ready = recover_managed_sing_box_binary();
     if (!path_exists(PACKAGE_UPGRADE_STATE))
         return true;
-
-    if (!command_success_from_args([ INIT_PATH, "start" ]))
-        return false;
-
     unlink_if_exists(PACKAGE_UPGRADE_STATE);
+
+    if (!core_ready) {
+        log_package("Forkop was not started after the package upgrade because the sing-box core is missing", "warn");
+        return true;
+    }
+
+    if (!command_success_with_timeout([ INIT_PATH, "start" ], PACKAGE_START_TIMEOUT))
+        log_package("Forkop did not start after the package upgrade; check the log above", "warn");
     return true;
 }
 
