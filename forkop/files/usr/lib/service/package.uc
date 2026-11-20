@@ -21,7 +21,9 @@ const SING_BOX_INIT = env("FORKOP_SING_BOX_INIT", "/etc/init.d/sing-box");
 const SING_BOX_BIN = env("FORKOP_SING_BOX_BIN", "/usr/bin/sing-box");
 const SING_BOX_CRONET = env("FORKOP_SING_BOX_CRONET", "/usr/lib/libcronet.so");
 const SING_BOX_MANAGED_MARKER = env("SB_MANAGED_SERVICE_MARKER", "Forkop managed sing-box service for binary variants");
+const SING_BOX_VARIANT_STATE_FILE = env("SB_VARIANT_STATE_FILE", "/etc/forkop/sing-box-variant");
 const PACKAGE_UPGRADE_STATE = env("FORKOP_PACKAGE_UPGRADE_STATE", "/tmp/forkop-package-was-running");
+const PACKAGE_RECOVERY_LOCK_DIR = env("FORKOP_PACKAGE_RECOVERY_LOCK_DIR", "/tmp/forkop-package-recovery.lock");
 const PACKAGE_TEST_MODE = env("FORKOP_PACKAGE_TEST_MODE", "") != "";
 
 function shell_quote(value) {
@@ -109,6 +111,32 @@ function remove_managed_sing_box() {
     unlink_if_exists(SING_BOX_CRONET);
 }
 
+function managed_sing_box_variant() {
+    let marker = trim(as_string(fs.readfile(SING_BOX_VARIANT_STATE_FILE) || ""));
+    if (marker == "forkop-tiny")
+        return "forkop-tiny";
+    if (marker == "extended-compressed")
+        return "extended-compressed";
+    return "";
+}
+
+function recover_managed_sing_box_binary() {
+    let variant = managed_sing_box_variant();
+    if (variant == "" || path_exists(SING_BOX_BIN))
+        return true;
+
+    let action = variant == "forkop-tiny" ? "install_forkop_tiny" : "install_extended_compressed";
+    command_success_from_args([ "logger", "-t", "forkop", "[info] Restoring the managed sing-box binary after the Forkop package upgrade" ]);
+    return command_success_from_args([
+        "env",
+        "UPDATES_LOCK_DIR=" + PACKAGE_RECOVERY_LOCK_DIR,
+        BIN_PATH,
+        "component_action",
+        "sing_box",
+        action
+    ]);
+}
+
 function remember_upgrade_state(action) {
     if (as_string(action) != "upgrade") {
         unlink_if_exists(PACKAGE_UPGRADE_STATE);
@@ -127,13 +155,20 @@ function prerm_cleanup(action) {
     if (!PACKAGE_TEST_MODE) {
         command_success_from_args([ INIT_PATH, "stop" ]);
         restore_dnsmasq_if_needed();
-        remove_managed_sing_box();
+        if (as_string(action) != "upgrade")
+            remove_managed_sing_box();
     }
     return remove_rt_tables_entry();
 }
 
 function postinst_restore() {
-    if (env("IPKG_INSTROOT", "") != "" || !path_exists(PACKAGE_UPGRADE_STATE))
+    if (env("IPKG_INSTROOT", "") != "")
+        return true;
+
+    if (!recover_managed_sing_box_binary())
+        return false;
+
+    if (!path_exists(PACKAGE_UPGRADE_STATE))
         return true;
 
     if (!command_success_from_args([ INIT_PATH, "start" ]))

@@ -187,4 +187,68 @@ FORKOP_RT_TABLES="$WORK_DIR/rt_tables_upgrade" \
 [ ! -e "$FORKOP_PACKAGE_UPGRADE_STATE" ] ||
   fail "package pre-upgrade must not mark an already stopped service"
 
+cat >"$WORK_DIR/upgrade-managed-init" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  status) exit 0 ;;
+  stop|start) printf '%s\n' "$1" >>"${FORKOP_UPGRADE_LOG:?}" ;;
+esac
+SH
+chmod 0755 "$WORK_DIR/upgrade-managed-init"
+cat >"$WORK_DIR/managed-sing-box-init" <<'SH'
+#!/usr/bin/env bash
+# Forkop managed sing-box service for binary variants
+exit 0
+SH
+chmod 0755 "$WORK_DIR/managed-sing-box-init"
+printf 'binary\n' >"$WORK_DIR/managed-sing-box-bin"
+printf 'cronet\n' >"$WORK_DIR/managed-cronet"
+: >"$WORK_DIR/upgrade-managed.log"
+printf '105 forkop\n' >"$WORK_DIR/rt_tables_upgrade_managed"
+cat >"$WORK_DIR/upgrade-managed.state" <<'EOF_UCI'
+forkop.settings=settings
+forkop.settings.dont_touch_dhcp=1
+EOF_UCI
+FORKOP_UCI_STATE_FILE="$WORK_DIR/upgrade-managed.state" \
+FORKOP_INIT="$WORK_DIR/upgrade-managed-init" \
+FORKOP_UPGRADE_LOG="$WORK_DIR/upgrade-managed.log" \
+FORKOP_SING_BOX_INIT="$WORK_DIR/managed-sing-box-init" \
+FORKOP_SING_BOX_BIN="$WORK_DIR/managed-sing-box-bin" \
+FORKOP_SING_BOX_CRONET="$WORK_DIR/managed-cronet" \
+FORKOP_RT_TABLES="$WORK_DIR/rt_tables_upgrade_managed" \
+  ucode -L "$FORKOP_LIB" "$PACKAGE_UC" prerm upgrade
+FORKOP_UCI_STATE_FILE="$WORK_DIR/upgrade-managed.state" \
+FORKOP_INIT="$WORK_DIR/upgrade-managed-init" \
+FORKOP_UPGRADE_LOG="$WORK_DIR/upgrade-managed.log" \
+FORKOP_SING_BOX_INIT="$WORK_DIR/managed-sing-box-init" \
+FORKOP_SING_BOX_BIN="$WORK_DIR/managed-sing-box-bin" \
+FORKOP_SING_BOX_CRONET="$WORK_DIR/managed-cronet" \
+  ucode -L "$FORKOP_LIB" "$PACKAGE_UC" postinst
+[ -f "$WORK_DIR/managed-sing-box-init" ] && [ -f "$WORK_DIR/managed-sing-box-bin" ] && [ -f "$WORK_DIR/managed-cronet" ] ||
+  fail "package upgrade must preserve the managed sing-box service and binary"
+grep -Fxq start "$WORK_DIR/upgrade-managed.log" ||
+  fail "package postinst must start Forkop after preserving the managed sing-box service"
+
+cat >"$WORK_DIR/recovery-bin" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FORKOP_RECOVERY_LOG:?}"
+SH
+chmod 0755 "$WORK_DIR/recovery-bin"
+printf 'forkop-tiny\n' >"$WORK_DIR/managed-sing-box-variant"
+printf '1\n' >"$FORKOP_PACKAGE_UPGRADE_STATE"
+: >"$WORK_DIR/recovery.log"
+rm -f "$WORK_DIR/managed-sing-box-bin"
+FORKOP_UCI_STATE_FILE="$WORK_DIR/upgrade-managed.state" \
+FORKOP_INIT="$WORK_DIR/upgrade-managed-init" \
+FORKOP_UPGRADE_LOG="$WORK_DIR/upgrade-managed.log" \
+FORKOP_SING_BOX_INIT="$WORK_DIR/managed-sing-box-init" \
+FORKOP_SING_BOX_BIN="$WORK_DIR/managed-sing-box-bin" \
+FORKOP_SING_BOX_CRONET="$WORK_DIR/managed-cronet" \
+SB_VARIANT_STATE_FILE="$WORK_DIR/managed-sing-box-variant" \
+FORKOP_RECOVERY_LOG="$WORK_DIR/recovery.log" \
+FORKOP_BIN="$WORK_DIR/recovery-bin" \
+  ucode -L "$FORKOP_LIB" "$PACKAGE_UC" postinst
+grep -Fxq 'component_action sing_box install_forkop_tiny' "$WORK_DIR/recovery.log" ||
+  fail "package postinst must restore a missing managed sing-box binary after upgrade"
+
 printf 'package lifecycle checks passed\n'
