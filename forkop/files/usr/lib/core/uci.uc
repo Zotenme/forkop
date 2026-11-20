@@ -7,6 +7,7 @@ let as_string = common.as_string;
 
 const UCI_STATE_FILE = getenv("FORKOP_UCI_STATE_FILE") || getenv("UCI_STATE") || "";
 const UCI_LOG_FILE = getenv("FORKOP_UCI_LOG_FILE") || getenv("UCI_LOG") || "";
+const UCI_CONFIG_DIR = getenv("FORKOP_UCI_CONFIG_DIR") || "/etc/config";
 
 let runtime_cursor = false;
 let loaded_packages = {};
@@ -300,6 +301,23 @@ function load(package_name) {
     }
 }
 
+function ensure_package_file(package_name) {
+    package_name = as_string(package_name);
+    if (fixture_enabled() || package_name == "")
+        return package_name != "";
+
+    let path = UCI_CONFIG_DIR + "/" + package_name;
+    if (fs.stat(path) != null)
+        return true;
+
+    try {
+        return fs.writefile(path, "") != null;
+    }
+    catch (e) {
+        return false;
+    }
+}
+
 function value_to_string(value) {
     if (value == null)
         return "";
@@ -410,7 +428,7 @@ function set_section(path, type_name) {
     let c = cursor();
     if (c == null || parts == null || parts.option != "")
         return false;
-    if (!load(parts.package))
+    if (!ensure_package_file(parts.package) || !load(parts.package))
         return false;
     parts = resolve_parts(c, parts);
     if (parts == null)
@@ -433,6 +451,9 @@ function add(package_name, type_name) {
     if (c == null)
         return "";
 
+    if (!ensure_package_file(package_name))
+        return "";
+
     try {
         load(package_name);
         let section = c.add(as_string(package_name), as_string(type_name));
@@ -452,7 +473,7 @@ function set(path, value) {
     let c = cursor();
     if (c == null || parts == null || parts.option == "")
         return false;
-    if (!load(parts.package))
+    if (!ensure_package_file(parts.package) || !load(parts.package))
         return false;
     parts = resolve_parts(c, parts);
     if (parts == null)
@@ -476,7 +497,7 @@ function add_list(path, value) {
     let c = cursor();
     if (c == null || parts == null || parts.option == "")
         return false;
-    if (!load(parts.package))
+    if (!ensure_package_file(parts.package) || !load(parts.package))
         return false;
     parts = resolve_parts(c, parts);
     if (parts == null)
@@ -610,6 +631,7 @@ function section_objects(package_name, type_name) {
 return {
     available,
     load,
+    ensure_package_file,
     get,
     get_all,
     exists,

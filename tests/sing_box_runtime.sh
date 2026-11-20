@@ -7,6 +7,7 @@ FORKOP_BIN="$ROOT_DIR/forkop/files/usr/bin/forkop"
 CLI_UC="$FORKOP_BIN"
 SING_BOX_RUNTIME_SH="$FORKOP_LIB/sing_box_runtime.sh"
 LIFECYCLE_UC="$FORKOP_LIB/service/lifecycle.uc"
+UCI_CORE_UC="$FORKOP_LIB/core/uci.uc"
 SINGBOX_RUNTIME_UC="$FORKOP_LIB/singbox/runtime.uc"
 SINGBOX_GENERATOR_UC="$FORKOP_LIB/singbox/generator.uc"
 WORK_DIR="$(mktemp -d)"
@@ -36,6 +37,20 @@ grep -Fq 'mode == "configure-service"' "$SINGBOX_RUNTIME_UC" ||
   fail "singbox/runtime.uc must own sing-box service configuration"
 grep -Fq 'mode == "init-config"' "$SINGBOX_RUNTIME_UC" ||
   fail "singbox/runtime.uc must own sing-box config initialization"
+mkdir -p "$WORK_DIR/uci-config"
+if ! FORKOP_UCI_CONFIG_DIR="$WORK_DIR/uci-config" \
+  ucode -L "$FORKOP_LIB" -e 'let uci = require("core.uci"); exit(uci.ensure_package_file("sing-box") ? 0 : 1);'; then
+  fail "core.uci must create a missing UCI package file before setting a section"
+fi
+[ -f "$WORK_DIR/uci-config/sing-box" ] ||
+  fail "core.uci must create /etc/config/sing-box when it is missing"
+printf 'existing config\n' >"$WORK_DIR/uci-config/sing-box"
+FORKOP_UCI_CONFIG_DIR="$WORK_DIR/uci-config" \
+  ucode -L "$FORKOP_LIB" -e 'let uci = require("core.uci"); exit(uci.ensure_package_file("sing-box") ? 0 : 1);'
+[ "$(cat "$WORK_DIR/uci-config/sing-box")" = "existing config" ] ||
+  fail "core.uci must not overwrite an existing UCI package file"
+grep -Fq 'ensure_package_file(parts.package) || !load(parts.package)' "$UCI_CORE_UC" ||
+  fail "core.uci must create missing UCI package files when setting section options"
 grep -Fq 'mode == "service-listen-address"' "$SINGBOX_RUNTIME_UC" ||
   fail "singbox/runtime.uc must own service listen address detection"
 grep -Fq 'mode == "service-proxy-address"' "$SINGBOX_RUNTIME_UC" ||
