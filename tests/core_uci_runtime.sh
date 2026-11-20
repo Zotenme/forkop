@@ -149,7 +149,9 @@ assert_equal(uci.get("dhcp.cfg01411c.server"), "1.1.1.1", "anonymous del_list mu
 assert_true(uci.delete("dhcp.@dnsmasq[9].server") == false, "missing anonymous section must fail writes");
 UCODE
 
-ucode -L "$UCODE_LIB" -L "$WORK_DIR" "$WORK_DIR/check.uc" ||
+mkdir -p "$WORK_DIR/etc-config"
+FORKOP_UCI_CONFIG_DIR="$WORK_DIR/etc-config" \
+  ucode -L "$UCODE_LIB" -L "$WORK_DIR" "$WORK_DIR/check.uc" ||
   fail "core.uci anonymous selector runtime regression"
 
 printf 'core UCI runtime checks passed\n'
